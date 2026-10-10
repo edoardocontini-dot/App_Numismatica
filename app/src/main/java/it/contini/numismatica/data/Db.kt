@@ -40,12 +40,11 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 1
 
     // ---------- cache ----------
 
-    fun cached(url: String, maxAgeMs: Long): String? {
+    fun cached(url: String, maxAgeMs: Long): String? =
         readableDatabase.rawQuery(
             "SELECT body FROM cache WHERE url = ? AND fetched_at > ?",
             arrayOf(url, (System.currentTimeMillis() - maxAgeMs).toString())
-        ).use { c -> return if (c.moveToFirst()) c.getString(0) else null }
-    }
+        ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
 
     fun putCache(url: String, body: String) {
         val v = ContentValues().apply {
