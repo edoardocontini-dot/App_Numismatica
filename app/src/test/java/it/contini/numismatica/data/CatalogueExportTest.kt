@@ -22,6 +22,7 @@ class CatalogueExportTest {
         obverseImage = "https://en.numista.com/catalogue/photos/italie/1-original.jpg", reverseImage = null,
         obverseDescription = "Busto femminile", reverseDescription = "Caravelle", obverseLettering = "REPUBBLICA ITALIANA",
         reverseLettering = null, edge = "Iscrizione", mints = listOf("Roma"), comments = null,
+        objectType = "Moneta circolante", issuingEntity = "Zecca dello Stato", references = listOf("KM# 98"),
     )
 
     @Test
@@ -31,9 +32,9 @@ class CatalogueExportTest {
         val c = item(3, "Pezzo senza dettagli", "Francia", null)
         val sa = TypeSummary(1, a.title, "coin", "italie", "Italia", 1958, 1958, null, null)
         val entries = listOf(
-            CatalogueExport.Entry(a, detail(sa)),
-            CatalogueExport.Entry(b, null),
-            CatalogueExport.Entry(c, null),
+            CatalogueExport.Entry(a, detail(sa), country = "Italia"),
+            CatalogueExport.Entry(b, null, country = "Roma antica"),
+            CatalogueExport.Entry(c, null, country = "Francia"),
         )
         val out = File("build/test-output").apply { mkdirs() }
         val f = File(out, "sample-catalogue.xlsx")

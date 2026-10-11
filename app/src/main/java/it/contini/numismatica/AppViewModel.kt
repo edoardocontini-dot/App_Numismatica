@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import it.contini.numismatica.data.CatalogueExport
 import it.contini.numismatica.data.Issue
+import it.contini.numismatica.data.CountryIndex
 import it.contini.numismatica.data.Issuer
 import it.contini.numismatica.data.NumistaApi
 import it.contini.numismatica.data.OwnedItem
@@ -62,7 +63,8 @@ enum class StatusFilter(val label: String) { ALL("Tutte"), ACTIVE("In corso"), D
 
 data class CollectionFilters(
     val text: String = "",
-    val issuerName: String? = null,
+    /** Italian country name (see CountryIndex) */
+    val country: String? = null,
     val category: String? = null,
     val material: String? = null,
     val status: StatusFilter = StatusFilter.ALL,
@@ -78,14 +80,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val search = MutableStateFlow(SearchState())
     val owned = MutableStateFlow<List<OwnedItem>>(emptyList())
     val collectionFilters = MutableStateFlow(CollectionFilters())
-    val issuers = MutableStateFlow<List<Issuer>>(emptyList())
-    val issuersError = MutableStateFlow<String?>(null)
+    /** Numista issuers grouped into countries; null until loaded (one request, cached for months). */
+    val countryIndex = MutableStateFlow<CountryIndex?>(null)
+    val countryError = MutableStateFlow<String?>(null)
     val apiKey = MutableStateFlow(repo.apiKey)
     val requests = MutableStateFlow(repo.requestsThisMonth())
     val message = MutableStateFlow<String?>(null)
 
     init {
         refreshOwned()
+        loadCountries()
     }
 
     private fun refreshOwned() = viewModelScope.launch { owned.value = repo.owned() }
@@ -99,6 +103,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setApiKey(key: String) {
         repo.apiKey = key
         apiKey.value = repo.apiKey
+        loadCountries()
         message.value = if (key.isBlank()) "Chiave rimossa" else "Chiave salvata"
     }
 
@@ -144,18 +149,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshCounter()
     }
 
-    fun loadIssuers() {
-        if (issuers.value.isNotEmpty()) return
+    fun loadCountries() {
+        if (countryIndex.value != null || repo.apiKey.isBlank()) return
         viewModelScope.launch {
-            issuersError.value = null
+            countryError.value = null
             try {
-                issuers.value = repo.issuers()
+                val list = repo.issuers()
+                countryIndex.value = withContext(Dispatchers.Default) { CountryIndex(list).also { it.countries } }
             } catch (e: Exception) {
-                issuersError.value = e.message
+                countryError.value = e.message
             }
             refreshCounter()
         }
     }
+
+    /** "Italia" or "Italia · Italian States"; falls back to Numista's issuer name until the countries are loaded. */
+    fun place(issuerCode: String, issuerName: String): String =
+        countryIndex.value?.placeLabel(issuerCode, issuerName) ?: issuerName
+
+    fun countryOf(o: OwnedItem): String =
+        countryIndex.value?.countryName(o.issuerCode) ?: o.issuerName.ifBlank { "Senza paese" }
 
     // ---------- details ----------
 
@@ -238,8 +251,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val text = f.text.trim().lowercase()
         return items.filter { o ->
             (text.isEmpty() || o.title.lowercase().contains(text) || o.notes.lowercase().contains(text) ||
-                o.issuerName.lowercase().contains(text)) &&
-                (f.issuerName == null || o.issuerName == f.issuerName) &&
+                o.issuerName.lowercase().contains(text) || countryOf(o).lowercase().contains(text)) &&
+                (f.country == null || countryOf(o) == f.country) &&
                 (f.category == null || o.category == f.category) &&
                 (f.material == null || o.composition == f.material) &&
                 statusMatches(o, f.status) &&

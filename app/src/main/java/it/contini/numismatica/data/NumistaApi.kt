@@ -108,7 +108,7 @@ object NumistaApi {
             currency = value?.optJSONObject("currency")?.let { it.str("full_name") ?: it.str("name") },
             composition = o.optJSONObject("composition")?.str("text"),
             weight = o.str("weight"),
-            size = o.str("size"),
+            size = listOfNotNull(o.str("size"), o.str("size2")).joinToString(" × ").ifBlank { null },
             thickness = o.str("thickness"),
             shape = o.str("shape"),
             technique = o.optJSONObject("technique")?.str("text"),
@@ -123,7 +123,11 @@ object NumistaApi {
             reverseLettering = reverse?.str("lettering"),
             edge = o.optJSONObject("edge")?.str("description"),
             mints = o.optJSONArray("mints").names("name"),
-            comments = o.str("comments")?.let { stripHtml(it) },
+            comments = o.str("comments")?.let { stripHtml(it) }?.takeIf { it.isNotBlank() },
+            objectType = o.optJSONObject("object_type")?.str("name"),
+            issuingEntity = o.optJSONObject("issuing_entity")?.str("name"),
+            references = references(o.optJSONArray("references")),
+            watermark = o.optJSONObject("watermark")?.str("description"),
         )
     }
 
@@ -152,6 +156,7 @@ object NumistaApi {
                 sortYear = gregorian ?: year ?: o.intOrNull("min_year"),
                 mintage = o.optString("mintage").trim().toLongOrNull()?.takeIf { it > 0 },
                 comment = o.str("comment")?.let { stripHtml(it) }?.takeIf { it.isNotBlank() },
+                references = references(o.optJSONArray("references")),
             )
         }.sortedWith(compareBy<Issue>({ it.sortYear ?: Int.MAX_VALUE }, { it.label }))
     }
@@ -161,8 +166,24 @@ object NumistaApi {
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val code = o.str("code") ?: return@mapNotNull null
-            Issuer(code, o.str("name") ?: code)
+            Issuer(
+                code = code,
+                name = o.str("name") ?: code,
+                parentCode = o.optJSONObject("parent")?.str("code"),
+                level = o.intOrNull("level") ?: 1,
+            )
         }.sortedBy { it.name.lowercase() }
+    }
+
+    /** [{"catalogue": {"code": "KM"}, "number": "98"}] -> ["KM# 98"] */
+    private fun references(arr: JSONArray?): List<String> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val r = arr.optJSONObject(i) ?: return@mapNotNull null
+            val number = r.str("number") ?: return@mapNotNull null
+            val code = r.optJSONObject("catalogue")?.str("code")
+            if (code != null) "$code# $number" else number
+        }
     }
 }
 
@@ -189,4 +210,7 @@ fun stripHtml(s: String): String =
         .replace("&#39;", "'")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
+        .replace("\r\n", "\n")
+        .replace(Regex("[ \t]+\n"), "\n")
+        .replace(Regex("\n{3,}"), "\n\n")
         .trim()

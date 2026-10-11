@@ -72,7 +72,7 @@ class Repository(context: Context) {
     }
 
     suspend fun issuers(): List<Issuer> {
-        val body = fetchLocalized(60 * DAY) { l -> NumistaApi.issuersUrl(l) }
+        val body = fetchLocalized(120 * DAY) { l -> NumistaApi.issuersUrl(l) }
         return withContext(Dispatchers.Default) { NumistaApi.parseIssuers(body) }
     }
 
@@ -94,6 +94,8 @@ class Repository(context: Context) {
     suspend fun exportEntries(onProgress: (done: Int, total: Int) -> Unit): List<CatalogueExport.Entry> {
         val items = owned()
         var networkOk = true
+        // Unified country names; if the issuer list can't be loaded, Numista's issuer names are used
+        val index = runCatching { CountryIndex(issuers()) }.getOrNull()
         return items.mapIndexed { i, item ->
             onProgress(i, items.size)
             val cachedBody = withContext(Dispatchers.IO) {
@@ -104,7 +106,7 @@ class Repository(context: Context) {
                     .onFailure { networkOk = false }.getOrNull()
             } else null
             val detail = body?.let { b -> runCatching { NumistaApi.parseType(b) }.getOrNull() }
-            CatalogueExport.Entry(item, detail)
+            CatalogueExport.Entry(item, detail, index?.countryName(item.issuerCode) ?: item.issuerName)
         }.also { onProgress(items.size, items.size) }
     }
 

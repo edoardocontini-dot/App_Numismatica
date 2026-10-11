@@ -52,9 +52,14 @@ import it.contini.numismatica.data.OwnedItem
 fun CollectionScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
     val owned by vm.owned.collectAsState()
     val f by vm.collectionFilters.collectAsState()
-    val shown = remember(owned, f) { vm.filteredOwned(owned, f) }
-    val groups = remember(shown) { shown.groupBy { it.issuerName.ifBlank { "Senza paese" } } }
-    val countries = remember(owned) { owned.map { it.issuerName }.filter { it.isNotBlank() }.distinct().sortedBy { it.lowercase() } }
+    val countryIndex by vm.countryIndex.collectAsState()
+    val shown = remember(owned, f, countryIndex) { vm.filteredOwned(owned, f) }
+    val groups = remember(shown, countryIndex) {
+        shown.groupBy { vm.countryOf(it) }.toSortedMap(java.text.Collator.getInstance(java.util.Locale.ITALIAN))
+    }
+    val countries = remember(owned, countryIndex) {
+        owned.map { vm.countryOf(it) }.distinct().sortedWith(java.text.Collator.getInstance(java.util.Locale.ITALIAN))
+    }
     val materials = remember(owned) { owned.mapNotNull { it.composition }.distinct().sortedBy { it.lowercase() } }
     val missingDetails = remember(owned) { owned.count { it.composition == null || it.demonetized == null } }
 
@@ -105,9 +110,9 @@ fun CollectionScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(
-                selected = f.issuerName != null,
+                selected = f.country != null,
                 onClick = { showCountry = true },
-                label = { Text(f.issuerName ?: "Paese") },
+                label = { Text(f.country ?: "Paese") },
             )
             DropdownChip(
                 label = f.category?.let { Categories.label(it) } ?: "Tipo",
@@ -187,9 +192,11 @@ fun CollectionScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
                         o.composition,
                         when (o.demonetized) { true -> "fuori corso"; false -> "in corso"; null -> null },
                     ).joinToString(" · ")
+                    // Show the specific issuer only when it is not the country itself ("Italian States")
+                    val subIssuer = countryIndex?.placeLabel(o.issuerCode, o.issuerName)?.substringAfter(" · ", "") ?: ""
                     ItemRow(
                         title = o.title,
-                        issuer = "",
+                        issuer = subIssuer,
                         category = o.category,
                         minYear = o.minYear,
                         maxYear = o.maxYear,
@@ -209,7 +216,7 @@ fun CollectionScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
         IssuerPickerDialog(
             issuers = countries.map { Issuer(it, it) },
             error = if (countries.isEmpty()) "Nessun paese in collezione." else null,
-            onPick = { iss -> set { it.copy(issuerName = iss?.name) }; showCountry = false },
+            onPick = { iss -> set { it.copy(country = iss?.name) }; showCountry = false },
             onDismiss = { showCountry = false },
         )
     }

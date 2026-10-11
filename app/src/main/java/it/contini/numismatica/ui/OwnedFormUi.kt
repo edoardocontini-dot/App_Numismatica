@@ -129,7 +129,11 @@ private fun YearPicker(
             YearOption(
                 iss.label,
                 iss.mintage,
-                listOfNotNull(iss.mintage?.let { "Tiratura ${formatThousands(it)}" }, iss.comment).joinToString(" · ").ifBlank { null },
+                listOfNotNull(
+                    iss.mintage?.let { "Tiratura ${formatThousands(it)}" },
+                    iss.references.joinToString(", ").ifBlank { null },
+                    iss.comment,
+                ).joinToString(" · ").ifBlank { null },
             )
         }
         when {
@@ -236,7 +240,7 @@ fun AddToCollectionDialog(
                     Column(Modifier.weight(1f)) {
                         Text(summary.title, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            listOf(summary.issuerName, yearsLabel(summary.minYear, summary.maxYear)).filter { it.isNotBlank() }.joinToString(" · "),
+                            listOf(vm.place(summary.issuerCode, summary.issuerName), yearsLabel(summary.minYear, summary.maxYear)).filter { it.isNotBlank() }.joinToString(" · "),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

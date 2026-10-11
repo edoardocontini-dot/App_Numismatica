@@ -58,6 +58,7 @@ import it.contini.numismatica.data.yearsLabel
 fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
     val owned by vm.owned.collectAsState()
     val ownedItem = owned.firstOrNull { it.typeId == id }
+    val countryIndex by vm.countryIndex.collectAsState()
     var detail by remember { mutableStateOf<TypeDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -95,7 +96,9 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
             }
             error?.let { InfoCard(it, isError = true) }
 
-            detail?.let { d -> DetailBody(d) }
+            detail?.let { d ->
+                DetailBody(d, countryIndex?.placeLabel(d.summary.issuerCode, d.summary.issuerName) ?: d.summary.issuerName)
+            }
 
             Spacer(Modifier.padding(8.dp))
             HorizontalDivider()
@@ -141,7 +144,7 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
 }
 
 @Composable
-private fun DetailBody(d: TypeDetail) {
+private fun DetailBody(d: TypeDetail, place: String) {
     val uri = LocalUriHandler.current
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         listOf("Dritto" to (d.obverseImage ?: d.summary.obverseThumb), "Rovescio" to (d.reverseImage ?: d.summary.reverseThumb))
@@ -166,7 +169,7 @@ private fun DetailBody(d: TypeDetail) {
     Spacer(Modifier.padding(6.dp))
     Text(d.summary.title, style = MaterialTheme.typography.titleLarge)
     Text(
-        listOf(d.summary.issuerName, yearsLabel(d.summary.minYear, d.summary.maxYear), Categories.label(d.summary.category))
+        listOf(place, yearsLabel(d.summary.minYear, d.summary.maxYear), Categories.label(d.summary.category))
             .filter { it.isNotBlank() }.joinToString(" · "),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -178,6 +181,7 @@ private fun DetailBody(d: TypeDetail) {
         null -> null
     }
     val facts = listOf(
+        "Tipologia" to d.objectType,
         "Valore" to d.valueText,
         "Valuta" to d.currency,
         "Stato" to status,
@@ -188,8 +192,12 @@ private fun DetailBody(d: TypeDetail) {
         "Forma" to d.shape,
         "Tecnica" to d.technique,
         "Autorità" to d.rulers.joinToString(", ").ifBlank { null },
+        "Emittente" to d.summary.issuerName,
+        "Ente emittente" to d.issuingEntity,
         "Zecca" to d.mints.joinToString(", ").ifBlank { null },
+        "Riferimenti" to d.references.joinToString(", ").ifBlank { null },
         "Bordo" to d.edge,
+        "Filigrana" to d.watermark,
         "Dritto" to listOfNotNull(d.obverseDescription, d.obverseLettering?.let { "Legenda: $it" }).joinToString("\n").ifBlank { null },
         "Rovescio" to listOfNotNull(d.reverseDescription, d.reverseLettering?.let { "Legenda: $it" }).joinToString("\n").ifBlank { null },
         "Note" to d.comments,

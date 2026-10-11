@@ -52,8 +52,8 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
     val state by vm.search.collectAsState()
     val owned by vm.owned.collectAsState()
     val apiKey by vm.apiKey.collectAsState()
-    val issuers by vm.issuers.collectAsState()
-    val issuersError by vm.issuersError.collectAsState()
+    val countryIndex by vm.countryIndex.collectAsState()
+    val countryError by vm.countryError.collectAsState()
     val ownedIds = remember(owned) { owned.map { it.typeId }.toSet() }
     val focus = LocalFocusManager.current
     val f = state.filters
@@ -104,7 +104,7 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
         ) {
             FilterChip(
                 selected = f.issuer != null,
-                onClick = { vm.loadIssuers(); showIssuers = true },
+                onClick = { vm.loadCountries(); showIssuers = true },
                 label = { Text(f.issuer?.name ?: "Paese") },
             )
             DropdownChip(
@@ -180,7 +180,7 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
                 val isOwned = t.id in ownedIds
                 ItemRow(
                     title = t.title,
-                    issuer = t.issuerName,
+                    issuer = countryIndex?.placeLabel(t.issuerCode, t.issuerName) ?: t.issuerName,
                     category = t.category,
                     minYear = t.minYear,
                     maxYear = t.maxYear,
@@ -216,9 +216,9 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
     }
 
     if (showIssuers) {
-        IssuerPickerDialog(
-            issuers = issuers,
-            error = issuersError,
+        CountryPickerDialog(
+            index = countryIndex,
+            error = countryError,
             onPick = { iss -> vm.updateFilters { it.copy(issuer = iss) }; showIssuers = false },
             onDismiss = { showIssuers = false },
         )

@@ -19,12 +19,15 @@ import java.util.Locale
  */
 object CatalogueExport {
 
-    data class Entry(val item: OwnedItem, val detail: TypeDetail?)
+    /** [country] is the unified Italian country name (see CountryIndex); defaults to Numista's issuer name. */
+    data class Entry(val item: OwnedItem, val detail: TypeDetail?, val country: String = item.issuerName)
 
     private val COLUMNS = listOf(
         Column("N°", 6.0),
-        Column("Paese / Emittente", 22.0),
+        Column("Paese", 18.0),
+        Column("Emittente", 22.0),
         Column("Tipo", 11.0),
+        Column("Tipologia", 18.0),
         Column("Denominazione", 34.0),
         Column("Valore nominale", 14.0),
         Column("Valuta", 16.0),
@@ -33,7 +36,9 @@ object CatalogueExport {
         Column("Periodo di emissione", 14.0),
         Column("Secolo", 12.0),
         Column("Autorità / Sovrano", 22.0),
+        Column("Ente emittente", 20.0),
         Column("Zecca", 22.0),
+        Column("Riferimenti", 16.0),
         Column("Materiale", 20.0),
         Column("Peso (g)", 9.0),
         Column("Diametro / misure (mm)", 11.0),
@@ -41,6 +46,7 @@ object CatalogueExport {
         Column("Forma", 12.0),
         Column("Tecnica", 12.0),
         Column("Bordo", 18.0),
+        Column("Filigrana", 18.0),
         Column("Stato", 12.0),
         Column("Fuori corso dal", 13.0),
         Column("Conservazione", 13.0),
@@ -58,7 +64,12 @@ object CatalogueExport {
 
     fun write(out: OutputStream, entries: List<Entry>, now: Date = Date()) {
         val sorted = entries.sortedWith(
-            compareBy<Entry>({ it.item.issuerName.lowercase(Locale.ITALIAN) }, { it.item.minYear ?: Int.MAX_VALUE }, { it.item.title.lowercase() })
+            compareBy<Entry>(
+                { it.country.lowercase(Locale.ITALIAN) },
+                { it.item.issuerName.lowercase(Locale.ITALIAN) },
+                { it.item.minYear ?: Int.MAX_VALUE },
+                { it.item.title.lowercase() },
+            )
         )
         XlsxWriter.write(out, listOf(collectionSheet(sorted), statisticsSheet(sorted, now)))
     }
@@ -78,8 +89,10 @@ object CatalogueExport {
             val d = e.detail
             listOf(
                 Cell.Num((i + 1).toDouble(), Style.INTEGER),
+                text(e.country),
                 text(o.issuerName),
                 text(Categories.label(o.category)),
+                text(d?.objectType),
                 text(o.title, Style.WRAP),
                 text(d?.valueText),
                 text(d?.currency),
@@ -88,7 +101,9 @@ object CatalogueExport {
                 text(yearsLabel(o.minYear, o.maxYear)),
                 text(centuryLabel(o.minYear ?: o.maxYear)),
                 text(d?.rulers?.joinToString(", "), Style.WRAP),
+                text(d?.issuingEntity, Style.WRAP),
                 text(d?.mints?.joinToString(", "), Style.WRAP),
+                text(d?.references?.joinToString(", "), Style.WRAP),
                 text(material(e), Style.WRAP),
                 numOrText(d?.weight, Style.DECIMAL),
                 numOrText(d?.size, Style.DECIMAL),
@@ -96,6 +111,7 @@ object CatalogueExport {
                 text(d?.shape),
                 text(d?.technique),
                 text(d?.edge, Style.WRAP),
+                text(d?.watermark, Style.WRAP),
                 text(status(e)),
                 text(italianDate(d?.demonetizationDate)),
                 text(o.grade),
@@ -111,6 +127,7 @@ object CatalogueExport {
                 text(dateFmt.format(Date(o.addedAt))),
             )
         }
+        check(rows.all { it.size == COLUMNS.size }) { "Excel: row length does not match the header" }
         return Sheet("Collezione", COLUMNS, rows)
     }
 
@@ -122,7 +139,7 @@ object CatalogueExport {
 
         val stamp = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ITALIAN).format(now)
         val pieces = entries.sumOf { it.item.quantity }
-        val countries = entries.map { it.item.issuerName }.filter { it.isNotBlank() }.distinct().size
+        val countries = entries.map { it.country }.filter { it.isNotBlank() }.distinct().size
         val centuries = entries.mapNotNull { e -> (e.item.minYear ?: e.item.maxYear)?.let { centuryLabel(it) } }.distinct().size
         val dated = entries.filter { (it.item.minYear ?: it.item.maxYear) != null }
         val oldest = dated.minByOrNull { it.item.minYear ?: it.item.maxYear ?: 0 }
@@ -151,10 +168,10 @@ object CatalogueExport {
         row(text("Ancora in corso legale"), Cell.Num(entries.count { status(it) == "In corso" }.toDouble(), Style.INTEGER_LEFT))
         row(text("Fuori corso"), Cell.Num(entries.count { status(it) == "Fuori corso" }.toDouble(), Style.INTEGER_LEFT))
         oldest?.let { e ->
-            row(text("Pezzo più antico"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.item.issuerName}"))
+            row(text("Pezzo più antico"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.country}"))
         }
         newest?.let { e ->
-            row(text("Pezzo più recente"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.item.issuerName}"))
+            row(text("Pezzo più recente"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.country}"))
         }
         entries.filter { it.item.mintage != null }.minByOrNull { it.item.mintage ?: Long.MAX_VALUE }?.let { e ->
             val what = listOf(e.item.title, e.item.issueYear).filter { it.isNotBlank() }.joinToString(" · ")
@@ -197,7 +214,7 @@ object CatalogueExport {
         }
 
         val cal = Calendar.getInstance()
-        section("Per paese / emittente", { it.item.issuerName })
+        section("Per paese", { it.country })
         section("Per secolo", { centuryLabel(it.item.minYear ?: it.item.maxYear) }, compareBy { centurySortKey(it) })
         section("Per tipo", { Categories.label(it.item.category) })
         section("Per materiale", { material(it) }, limit = 15)

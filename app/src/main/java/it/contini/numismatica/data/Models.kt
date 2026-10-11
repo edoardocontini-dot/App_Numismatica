@@ -37,9 +37,17 @@ data class TypeDetail(
     val edge: String?,
     val mints: List<String>,
     val comments: String?,
+    /** e.g. "Moneta commemorativa", "Banconota regolare" */
+    val objectType: String? = null,
+    /** e.g. "Banca d'Italia" */
+    val issuingEntity: String? = null,
+    /** Catalogue numbers, e.g. "KM# 98", "P# 3" */
+    val references: List<String> = emptyList(),
+    val watermark: String? = null,
 )
 
-data class Issuer(val code: String, val name: String)
+/** A Numista issuer. Issuers form a tree: level 1 = country / big group, deeper levels = states, cities… */
+data class Issuer(val code: String, val name: String, val parentCode: String? = null, val level: Int = 1)
 
 /** One issue of a type: a specific year (and mint mark) with its mintage. */
 data class Issue(
@@ -48,6 +56,8 @@ data class Issue(
     val sortYear: Int?,
     val mintage: Long?,
     val comment: String?,
+    /** Catalogue numbers of this specific issue, e.g. "P# 3a" */
+    val references: List<String> = emptyList(),
 )
 
 data class SearchPage(val total: Int, val items: List<TypeSummary>)

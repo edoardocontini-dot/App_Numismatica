@@ -85,8 +85,35 @@ class NumistaParseTest {
 
     @Test
     fun issuers() {
-        val list = NumistaApi.parseIssuers("""{"count": 2, "issuers": [{"code": "italie", "name": "Italy"}, {"code": "france", "name": "France"}]}""")
-        assertEquals(listOf("France", "Italy"), list.map { it.name })
+        val list = NumistaApi.parseIssuers(
+            """{"count": 3, "issuers": [
+                {"code": "italy", "name": "Italy", "level": 1},
+                {"code": "italie", "name": "Italy", "parent": {"code": "italy", "name": "Italy"}, "level": 2},
+                {"code": "france_section", "name": "France", "level": "1"}]}"""
+        )
+        assertEquals(listOf("France", "Italy", "Italy"), list.map { it.name })
+        assertEquals("italy", list.first { it.code == "italie" }.parentCode)
+        assertEquals(2, list.first { it.code == "italie" }.level)
+        assertNull(list.first { it.code == "italy" }.parentCode)
+    }
+
+    @Test
+    fun banknoteFields() {
+        val json = """
+            {"id": 7, "title": "500 Lire", "category": "banknote", "issuer": {"code": "x", "name": "X"},
+             "object_type": {"id": 79, "name": "Banconota regolare"},
+             "issuing_entity": {"id": 412, "name": "Banca d'Italia"},
+             "size": 201, "size2": 117,
+             "references": [{"catalogue": {"id": 931, "code": "P"}, "number": "3"}, {"number": "12"}],
+             "watermark": {"description": "Leonardo"}}
+        """.trimIndent()
+        val d = NumistaApi.parseType(json)
+        assertEquals("201 × 117", d.size)
+        assertEquals("Banconota regolare", d.objectType)
+        assertEquals("Banca d'Italia", d.issuingEntity)
+        assertEquals(listOf("P# 3", "12"), d.references)
+        assertEquals("Leonardo", d.watermark)
+        assertEquals("banknote", d.summary.category)
     }
 
     @Test
