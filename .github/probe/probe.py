@@ -10,7 +10,8 @@ import urllib.parse
 import urllib.request
 
 KEY = os.environ.get("NUMISTA_API_KEY", "").strip()
-if not KEY:
+MODE = os.environ.get("PROBE_MODE", "full")
+if not KEY and MODE == "full":
     raise SystemExit("NUMISTA_API_KEY secret is missing")
 
 BASE = "https://api.numista.com/v3"
@@ -29,6 +30,20 @@ def get(path, **params):
     print(path, params, "->", status, len(body), "bytes")
     return status, body
 
+
+if MODE == "keycheck":
+    # How does Numista answer a wrong key / no key? (no quota used: these requests are rejected)
+    for label, k in (("wrong", "0000000000000000000000000000000000000000"), ("empty", "")):
+        url = BASE + "/types?q=euro&count=1&lang=it"
+        req = urllib.request.Request(url, headers={"Numista-API-Key": k, "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                out[label] = {"status": r.status, "body": r.read().decode()[:300]}
+        except urllib.error.HTTPError as e:
+            out[label] = {"status": e.code, "body": e.read().decode("utf-8", "replace")[:300]}
+    with open("probe.json", "w", encoding="utf-8") as f:
+        json.dump(out, f)
+    raise SystemExit(0)
 
 status, issuers_en = get("/issuers", lang="en")
 get("/issuers", lang="it")

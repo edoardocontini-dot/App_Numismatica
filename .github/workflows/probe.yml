@@ -18,7 +18,7 @@ jobs:
       - name: Query Numista
         env:
           NUMISTA_API_KEY: ${{ secrets.NUMISTA_API_KEY }}
-        run: python3 .github/probe/probe.py
+        run: PROBE_MODE="$(cat .github/probe/mode 2>/dev/null || echo full)" python3 .github/probe/probe.py
 
       - name: Encrypt result (only the developer's private key can read it)
         run: |
