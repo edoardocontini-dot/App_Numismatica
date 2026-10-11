@@ -42,10 +42,14 @@ jobs:
               print(row)
           EOF
 
-      - uses: actions/upload-artifact@v4
+      # Test-only file, kept on a separate pre-release so it never replaces the app download
+      - uses: softprops/action-gh-release@v2
         with:
-          name: sample-catalogue
-          path: app/build/test-output/sample-catalogue.xlsx
+          tag_name: ci-sample
+          name: CI sample (test data)
+          prerelease: true
+          make_latest: false
+          files: app/build/test-output/sample-catalogue.xlsx
 
       - name: Build release APK
         run: gradle :app:assembleRelease --stacktrace
