@@ -3,6 +3,24 @@ package it.contini.numismatica.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,14 +60,12 @@ import java.time.LocalDate
 private const val FREE_QUOTA = 2000
 
 @Composable
-fun SettingsScreen(vm: AppViewModel) {
-    val savedKey by vm.apiKey.collectAsState()
+fun SettingsScreen(vm: AppViewModel, onGoSearch: () -> Unit) {
     val requests by vm.requests.collectAsState()
     val owned by vm.owned.collectAsState()
-    var key by remember(savedKey) { mutableStateOf(savedKey) }
-    var visible by remember { mutableStateOf(false) }
     var confirmImport by remember { mutableStateOf(false) }
-    val uri = LocalUriHandler.current
+
+    LaunchedEffect(Unit) { vm.refreshKeyState() }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { u ->
         if (u != null) vm.exportTo(u)
@@ -68,33 +84,7 @@ fun SettingsScreen(vm: AppViewModel) {
     ) {
         Text("Impostazioni", style = MaterialTheme.typography.headlineSmall)
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Chiave API Numista", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Il catalogo arriva da Numista. Serve una chiave gratuita: accedi a Numista, " +
-                        "vai su Il mio account → API, crea un'applicazione e copia qui la chiave.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = { uri.openUri("https://it.numista.com/api/") }) { Text("Apri la pagina API di Numista") }
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it.trim() },
-                    label = { Text("Chiave API") },
-                    singleLine = true,
-                    visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { visible = !visible }) {
-                            Icon(if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Mostra")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(onClick = { vm.setApiKey(key) }, enabled = key != savedKey, modifier = Modifier.fillMaxWidth()) {
-                    Text("Salva chiave")
-                }
-            }
-        }
+        ApiKeyCard(vm, onGoSearch)
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -158,5 +148,106 @@ fun SettingsScreen(vm: AppViewModel) {
             },
             dismissButton = { TextButton(onClick = { confirmImport = false }) { Text("Annulla") } },
         )
+    }
+}
+
+@Composable
+private fun ApiKeyCard(vm: AppViewModel, onGoSearch: () -> Unit) {
+    val savedKey by vm.apiKey.collectAsState()
+    val state by vm.keyState.collectAsState()
+    var key by remember { mutableStateOf(savedKey) }
+    var visible by remember { mutableStateOf(false) }
+    val uri = LocalUriHandler.current
+    val clipboard = LocalClipboardManager.current
+    val focus = LocalFocusManager.current
+    val checking = state is AppViewModel.KeyState.Checking
+    val green = if (isSystemInDarkTheme()) Color(0xFF81C784) else Color(0xFF2E7D32)
+    val orange = if (isSystemInDarkTheme()) Color(0xFFFFB74D) else Color(0xFFB26A00)
+
+    fun save() {
+        focus.clearFocus()
+        vm.verifyAndSaveKey(key)
+    }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Chiave API Numista", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Il catalogo arriva da Numista e serve una chiave gratuita. Apri la pagina API di Numista, " +
+                    "accedi, tocca \"Activate API access\" (piano gratuito) e copia la chiave che compare.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            TextButton(onClick = { uri.openUri("https://it.numista.com/api/") }) { Text("Apri la pagina API di Numista") }
+
+            OutlinedTextField(
+                value = key,
+                onValueChange = {
+                    key = it
+                    vm.keyEdited()
+                },
+                label = { Text("Chiave API") },
+                singleLine = true,
+                enabled = !checking,
+                visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { save() }),
+                trailingIcon = {
+                    Row {
+                        IconButton(onClick = {
+                            clipboard.getText()?.text?.let {
+                                key = it.trim()
+                                vm.keyEdited()
+                            }
+                        }) { Icon(Icons.Filled.ContentPaste, "Incolla") }
+                        IconButton(onClick = { visible = !visible }) {
+                            Icon(if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, if (visible) "Nascondi" else "Mostra")
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Button(onClick = { save() }, enabled = !checking && key.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Text(if (checking) "Verifica in corso…" else "Salva chiave")
+            }
+
+            when (val st = state) {
+                is AppViewModel.KeyState.Checking -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Verifico la chiave con Numista…")
+                }
+                is AppViewModel.KeyState.Valid -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.CheckCircle, null, tint = green, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Chiave riconosciuta", color = green, style = MaterialTheme.typography.titleMedium)
+                    }
+                    st.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    OutlinedButton(onClick = onGoSearch, modifier = Modifier.fillMaxWidth()) { Text("Inizia a cercare") }
+                }
+                is AppViewModel.KeyState.Invalid -> Row(verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Filled.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(st.message, color = MaterialTheme.colorScheme.error)
+                }
+                is AppViewModel.KeyState.Unverified -> Row(verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Filled.Warning, null, tint = orange, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(st.message)
+                }
+                AppViewModel.KeyState.Empty -> Unit
+            }
+
+            if (savedKey.isNotBlank() && !checking) {
+                TextButton(onClick = { key = ""; vm.removeKey() }) {
+                    Text("Rimuovi chiave", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
     }
 }

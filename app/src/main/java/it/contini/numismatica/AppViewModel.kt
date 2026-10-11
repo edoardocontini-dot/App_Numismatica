@@ -100,11 +100,79 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- settings ----------
 
-    fun setApiKey(key: String) {
-        repo.apiKey = key
-        apiKey.value = repo.apiKey
-        loadCountries()
-        message.value = if (key.isBlank()) "Chiave rimossa" else "Chiave salvata"
+    /** State of the API key box in Impostazioni. */
+    sealed interface KeyState {
+        data object Empty : KeyState
+        data object Checking : KeyState
+        data class Valid(val note: String? = null) : KeyState
+        data class Invalid(val message: String) : KeyState
+        data class Unverified(val message: String) : KeyState
+    }
+
+    val keyState = MutableStateFlow(currentKeyState())
+
+    private fun currentKeyState(): KeyState = when {
+        repo.apiKey.isBlank() -> KeyState.Empty
+        repo.keyVerified -> KeyState.Valid()
+        else -> KeyState.Unverified("Chiave salvata ma non ancora verificata. Tocca \"Salva chiave\" per controllarla.")
+    }
+
+    /** Called when Impostazioni opens, so a key rejected during a search shows up here. */
+    fun refreshKeyState() {
+        if (keyState.value !is KeyState.Checking && keyState.value !is KeyState.Invalid) keyState.value = currentKeyState()
+    }
+
+    /** Typing in the key box clears the previous result. */
+    fun keyEdited() {
+        if (keyState.value !is KeyState.Checking) keyState.value = KeyState.Empty
+    }
+
+    /** Checks the key with Numista and saves it only if Numista accepts it (or if there is no connection). */
+    fun verifyAndSaveKey(raw: String) {
+        val key = raw.filterNot { it.isWhitespace() }
+        if (key.isEmpty()) {
+            keyState.value = KeyState.Invalid("Incolla prima la chiave nel campo qui sopra.")
+            return
+        }
+        if (keyState.value is KeyState.Checking) return
+        keyState.value = KeyState.Checking
+        viewModelScope.launch {
+            val (result, detail) = repo.checkKey(key)
+            when (result) {
+                Repository.KeyCheck.VALID, Repository.KeyCheck.VALID_BUT_LIMITED -> {
+                    repo.apiKey = key
+                    repo.keyVerified = true
+                    apiKey.value = key
+                    keyState.value = KeyState.Valid(
+                        if (result == Repository.KeyCheck.VALID_BUT_LIMITED) {
+                            "Hai però raggiunto il limite di richieste del mese: le ricerche riprenderanno più avanti."
+                        } else null
+                    )
+                    loadCountries()
+                }
+                Repository.KeyCheck.INVALID -> keyState.value = KeyState.Invalid(
+                    "Chiave non riconosciuta da Numista. Controlla di averla copiata tutta, senza parti mancanti."
+                )
+                Repository.KeyCheck.OFFLINE -> {
+                    repo.apiKey = key
+                    apiKey.value = key
+                    keyState.value = KeyState.Unverified(
+                        "Nessuna connessione: la chiave è salvata ma non ancora verificata. Riprova quando sei online."
+                    )
+                }
+                Repository.KeyCheck.ERROR -> keyState.value = KeyState.Invalid(
+                    "Numista non ha risposto correttamente (${detail ?: "errore"}). Riprova tra qualche minuto."
+                )
+            }
+            refreshCounter()
+        }
+    }
+
+    fun removeKey() {
+        repo.apiKey = ""
+        apiKey.value = ""
+        keyState.value = KeyState.Empty
+        message.value = "Chiave rimossa"
     }
 
     // ---------- search ----------

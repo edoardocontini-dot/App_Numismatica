@@ -112,7 +112,13 @@ private fun App(vm: AppViewModel = viewModel()) {
                 CollectionScreen(vm, openDetail = { nav.navigate("detail/$it") })
             }
             composable("settings") {
-                SettingsScreen(vm)
+                SettingsScreen(vm, onGoSearch = {
+                    nav.navigate("search") {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                })
             }
             composable(
                 "detail/{id}",

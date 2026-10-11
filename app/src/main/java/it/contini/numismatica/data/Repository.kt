@@ -15,7 +15,30 @@ class Repository(context: Context) {
 
     var apiKey: String
         get() = prefs.getString("api_key", "") ?: ""
-        set(value) = prefs.edit().putString("api_key", value.trim()).apply()
+        set(value) = prefs.edit().putString("api_key", value.trim()).putBoolean("key_verified", false).apply()
+
+    /** True once Numista has accepted the saved key. */
+    var keyVerified: Boolean
+        get() = prefs.getBoolean("key_verified", false)
+        set(value) = prefs.edit().putBoolean("key_verified", value).apply()
+
+    enum class KeyCheck { VALID, VALID_BUT_LIMITED, INVALID, OFFLINE, ERROR }
+
+    /** Asks Numista whether [candidate] works, with one tiny search (1 request). Does not save anything. */
+    suspend fun checkKey(candidate: String): Pair<KeyCheck, String?> = withContext(Dispatchers.IO) {
+        try {
+            NumistaApi.get(NumistaApi.keyCheckUrl(lang), candidate)
+            countRequest()
+            KeyCheck.VALID to null
+        } catch (e: ApiException) {
+            when (e.code) {
+                401, 403 -> KeyCheck.INVALID to e.message
+                429 -> { countRequest(); KeyCheck.VALID_BUT_LIMITED to e.message }
+                0 -> KeyCheck.OFFLINE to e.message
+                else -> KeyCheck.ERROR to e.message
+            }
+        }
+    }
 
     /** Requests sent to Numista in the current calendar month (counted on the phone). */
     fun requestsThisMonth(): Int {
@@ -31,9 +54,14 @@ class Repository(context: Context) {
 
     /** Cache first, network only when needed. */
     private suspend fun fetch(url: String, maxAgeMs: Long): String = withContext(Dispatchers.IO) {
-        db.cached(url, maxAgeMs) ?: NumistaApi.get(url, apiKey).also {
-            countRequest()
-            db.putCache(url, it)
+        db.cached(url, maxAgeMs) ?: try {
+            NumistaApi.get(url, apiKey).also {
+                countRequest()
+                db.putCache(url, it)
+            }
+        } catch (e: ApiException) {
+            if (e.code == 401) keyVerified = false
+            throw e
         }
     }
 

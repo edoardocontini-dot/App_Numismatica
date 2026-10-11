@@ -29,6 +29,9 @@ object NumistaApi {
         return "$BASE/types?" + params.joinToString("&") { (k, v) -> k + "=" + URLEncoder.encode(v, "UTF-8") }
     }
 
+    /** Smallest useful request, used to check an API key. */
+    fun keyCheckUrl(lang: String) = "$BASE/types?q=euro&count=1&lang=$lang"
+
     fun typeUrl(id: Long, lang: String) = "$BASE/types/$id?lang=$lang"
 
     fun issuesUrl(id: Long, lang: String) = "$BASE/types/$id/issues?lang=$lang"
