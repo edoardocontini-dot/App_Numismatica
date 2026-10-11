@@ -3,6 +3,9 @@ name: Build APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - ".github/probe/**"
+      - ".github/workflows/probe.yml"
   workflow_dispatch:
 
 permissions:

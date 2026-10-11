@@ -1,0 +1,38 @@
+name: Numista probe (developer check)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/probe/trigger"]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Query Numista
+        env:
+          NUMISTA_API_KEY: ${{ secrets.NUMISTA_API_KEY }}
+        run: python3 .github/probe/probe.py
+
+      - name: Encrypt result (only the developer's private key can read it)
+        run: |
+          openssl rand -hex 32 > key.txt
+          openssl pkeyutl -encrypt -pubin -inkey .github/probe/probe_public.pem \
+            -pkeyopt rsa_padding_mode:oaep -in key.txt -out key.enc
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in probe.json -out probe.enc -pass file:key.txt
+          tar czf probe-data.tgz key.enc probe.enc
+          rm key.txt probe.json
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: probe-data
+          name: Probe data (encrypted, developer only)
+          prerelease: true
+          make_latest: false
+          files: probe-data.tgz
