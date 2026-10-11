@@ -33,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import it.contini.numismatica.ui.CollectionScreen
 import it.contini.numismatica.ui.DetailScreen
+import it.contini.numismatica.ui.ExportExcelDialogs
 import it.contini.numismatica.ui.NumismaticaTheme
 import it.contini.numismatica.ui.SearchScreen
 import it.contini.numismatica.ui.SettingsScreen
@@ -69,6 +70,8 @@ private fun App(vm: AppViewModel = viewModel()) {
             vm.message.value = null
         }
     }
+
+    ExportExcelDialogs(vm)
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route

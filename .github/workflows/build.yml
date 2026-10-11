@@ -23,6 +23,30 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
+      - name: Unit tests (includes a sample Excel catalogue)
+        run: gradle :app:testReleaseUnitTest --stacktrace
+
+      - name: Check the sample Excel opens correctly
+        run: |
+          pip install --quiet openpyxl
+          python3 - <<'EOF'
+          import openpyxl
+          wb = openpyxl.load_workbook("app/build/test-output/sample-catalogue.xlsx")
+          print("Sheets:", wb.sheetnames)
+          ws = wb["Collezione"]
+          print("Columns:", ws.max_column, "Rows:", ws.max_row)
+          print("Header:", [c.value for c in ws[1]])
+          for row in ws.iter_rows(min_row=2, values_only=True):
+              print(row)
+          for row in wb["Riepilogo"].iter_rows(values_only=True):
+              print(row)
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-catalogue
+          path: app/build/test-output/sample-catalogue.xlsx
+
       - name: Build release APK
         run: gradle :app:assembleRelease --stacktrace
 

@@ -63,6 +63,27 @@ class Repository(context: Context) {
 
     suspend fun removeOwned(typeId: Long) = withContext(Dispatchers.IO) { db.deleteOwned(typeId) }
 
+    // ---------- Excel export ----------
+
+    /**
+     * Collects the catalogue details for every owned piece. Uses the phone cache first (any age);
+     * only pieces never opened cost a Numista request. If Numista can't be reached the piece
+     * is exported with the data already on the phone.
+     */
+    suspend fun exportEntries(onProgress: (done: Int, total: Int) -> Unit): List<CatalogueExport.Entry> {
+        val items = owned()
+        var networkOk = true
+        return items.mapIndexed { i, item ->
+            onProgress(i, items.size)
+            val url = NumistaApi.typeUrl(item.typeId)
+            val body = withContext(Dispatchers.IO) { db.cachedAnyAge(url) } ?: if (networkOk) {
+                runCatching { fetch(url, maxAgeMs = 180 * DAY) }.onFailure { networkOk = false }.getOrNull()
+            } else null
+            val detail = body?.let { b -> runCatching { NumistaApi.parseType(b) }.getOrNull() }
+            CatalogueExport.Entry(item, detail)
+        }.also { onProgress(items.size, items.size) }
+    }
+
     // ---------- backup ----------
 
     suspend fun exportJson(): String = withContext(Dispatchers.IO) {
@@ -84,6 +105,9 @@ class Repository(context: Context) {
                 put("notes", it.notes)
                 put("issue_year", it.issueYear)
                 put("added_at", it.addedAt)
+                put("purchase_price", it.purchasePrice ?: JSONObject.NULL)
+                put("purchase_date", it.purchaseDate)
+                put("provenance", it.provenance)
             })
         }
         JSONObject().put("app", "numismatica").put("version", 1).put("items", arr).toString(2)
@@ -110,6 +134,9 @@ class Repository(context: Context) {
                 notes = o.str("notes") ?: "",
                 issueYear = o.str("issue_year") ?: "",
                 addedAt = o.optLong("added_at", System.currentTimeMillis()),
+                purchasePrice = if (o.has("purchase_price") && !o.isNull("purchase_price")) o.optDouble("purchase_price") else null,
+                purchaseDate = o.str("purchase_date") ?: "",
+                provenance = o.str("provenance") ?: "",
             )
         }.filter { it.typeId > 0 }
         db.replaceAllOwned(items)

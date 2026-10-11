@@ -61,6 +61,11 @@ data class OwnedItem(
     val notes: String,
     val issueYear: String,
     val addedAt: Long,
+    /** Price paid in euro, if he wants to record it. */
+    val purchasePrice: Double? = null,
+    val purchaseDate: String = "",
+    /** Where it came from: dealer, auction, inheritance, change… */
+    val provenance: String = "",
 )
 
 object Categories {

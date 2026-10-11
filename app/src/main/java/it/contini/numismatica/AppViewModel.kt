@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import it.contini.numismatica.data.CatalogueExport
 import it.contini.numismatica.data.Issuer
 import it.contini.numismatica.data.NumistaApi
 import it.contini.numismatica.data.OwnedItem
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.LocalDate
 
 enum class OwnedFilter { ALL, OWNED, MISSING }
 
@@ -232,6 +235,58 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshCounter()
         refreshOwned()
         message.value = "Aggiornati $done pezzi su ${missing.size}"
+    }
+
+    // ---------- Excel export ----------
+
+    /** (done, total) while the catalogue is being prepared, null otherwise. */
+    val exportProgress = MutableStateFlow<Pair<Int, Int>?>(null)
+
+    /** The last Excel file produced, waiting for the user to share or save it. */
+    val exportedFile = MutableStateFlow<File?>(null)
+
+    fun exportExcel() {
+        if (exportProgress.value != null) return
+        if (owned.value.isEmpty()) {
+            message.value = "La collezione è vuota: niente da esportare."
+            return
+        }
+        viewModelScope.launch {
+            exportProgress.value = 0 to owned.value.size
+            try {
+                val entries = repo.exportEntries { done, total -> exportProgress.value = done to total }
+                val file = withContext(Dispatchers.IO) {
+                    val dir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
+                    dir.listFiles()?.forEach { it.delete() }
+                    val f = File(dir, "Collezione_numismatica_${LocalDate.now()}.xlsx")
+                    f.outputStream().buffered().use { CatalogueExport.write(it, entries) }
+                    f
+                }
+                exportedFile.value = file
+                val missing = entries.count { it.detail == null }
+                if (missing > 0) {
+                    message.value = "$missing pezzi esportati senza dettagli (Numista non raggiungibile)."
+                }
+            } catch (e: Exception) {
+                message.value = "Esportazione non riuscita: ${e.message}"
+            } finally {
+                exportProgress.value = null
+                refreshCounter()
+            }
+        }
+    }
+
+    fun saveExportTo(uri: Uri, file: File) = viewModelScope.launch {
+        try {
+            withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                } ?: error("impossibile scrivere il file")
+            }
+            message.value = "File Excel salvato"
+        } catch (e: Exception) {
+            message.value = "Salvataggio non riuscito: ${e.message}"
+        }
     }
 
     // ---------- backup ----------

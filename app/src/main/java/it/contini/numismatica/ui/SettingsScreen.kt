@@ -112,10 +112,23 @@ fun SettingsScreen(vm: AppViewModel) {
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Catalogo Excel", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Crea un file Excel con tutta la collezione: un foglio con ogni pezzo (dati di catalogo, " +
+                        "conservazione, prezzo, note, link a Numista) e un foglio di riepilogo per paese, secolo e materiale.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(onClick = { vm.exportExcel() }, enabled = owned.isNotEmpty()) { Text("Esporta in Excel") }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Backup della collezione", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "La collezione (${owned.size} tipi) è salvata solo su questo telefono. " +
-                        "Fai ogni tanto un backup, per esempio su Google Drive.",
+                        "Fai ogni tanto un backup, per esempio su Google Drive. " +
+                        "Il backup serve per ripristinare l'app; per consultare la collezione usa il catalogo Excel.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

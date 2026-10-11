@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /** Local storage: the collection plus caches of Numista answers (to save API requests). */
-class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 1) {
+class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -27,7 +27,10 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 1
                 grade TEXT NOT NULL DEFAULT '',
                 notes TEXT NOT NULL DEFAULT '',
                 issue_year TEXT NOT NULL DEFAULT '',
-                added_at INTEGER NOT NULL
+                added_at INTEGER NOT NULL,
+                purchase_price REAL,
+                purchase_date TEXT NOT NULL DEFAULT '',
+                provenance TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent()
         )
@@ -35,8 +38,17 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 1
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // First version: nothing to migrate yet.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE owned ADD COLUMN purchase_price REAL")
+            db.execSQL("ALTER TABLE owned ADD COLUMN purchase_date TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE owned ADD COLUMN provenance TEXT NOT NULL DEFAULT ''")
+        }
     }
+
+    /** Cached body regardless of age (used by the Excel export to avoid new requests). */
+    fun cachedAnyAge(url: String): String? =
+        readableDatabase.rawQuery("SELECT body FROM cache WHERE url = ?", arrayOf(url))
+            .use { c -> if (c.moveToFirst()) c.getString(0) else null }
 
     // ---------- cache ----------
 
@@ -95,6 +107,9 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 1
         put("notes", notes)
         put("issue_year", issueYear)
         put("added_at", addedAt)
+        if (purchasePrice != null) put("purchase_price", purchasePrice) else putNull("purchase_price")
+        put("purchase_date", purchaseDate)
+        put("provenance", provenance)
     }
 
     private fun Cursor.toOwned(): OwnedItem {
@@ -116,6 +131,9 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 1
             notes = s("notes") ?: "",
             issueYear = s("issue_year") ?: "",
             addedAt = getLong(getColumnIndexOrThrow("added_at")),
+            purchasePrice = getColumnIndexOrThrow("purchase_price").let { if (isNull(it)) null else getDouble(it) },
+            purchaseDate = s("purchase_date") ?: "",
+            provenance = s("provenance") ?: "",
         )
     }
 }

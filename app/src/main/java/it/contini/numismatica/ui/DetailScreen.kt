@@ -213,6 +213,11 @@ private fun OwnedEditor(item: OwnedItem, onSave: (OwnedItem) -> Unit) {
     var grade by remember(item.typeId) { mutableStateOf(item.grade) }
     var year by remember(item.typeId) { mutableStateOf(item.issueYear) }
     var notes by remember(item.typeId) { mutableStateOf(item.notes) }
+    var price by remember(item.typeId) {
+        mutableStateOf(item.purchasePrice?.let { String.format(java.util.Locale.ITALIAN, "%.2f", it) } ?: "")
+    }
+    var purchaseDate by remember(item.typeId) { mutableStateOf(item.purchaseDate) }
+    var provenance by remember(item.typeId) { mutableStateOf(item.provenance) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -241,13 +246,59 @@ private fun OwnedEditor(item: OwnedItem, onSave: (OwnedItem) -> Unit) {
         OutlinedTextField(
             value = notes,
             onValueChange = { notes = it },
-            label = { Text("Note (provenienza, prezzo, ecc.)") },
+            label = { Text("Note") },
             minLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )
+        Text("Acquisto", style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = price,
+                onValueChange = { v -> price = v.filter { it.isDigit() || it == ',' || it == '.' }.take(12) },
+                label = { Text("Prezzo (€)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = purchaseDate,
+                onValueChange = { purchaseDate = it.take(20) },
+                label = { Text("Data") },
+                placeholder = { Text("gg/mm/aaaa") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        OutlinedTextField(
+            value = provenance,
+            onValueChange = { provenance = it.take(200) },
+            label = { Text("Provenienza (negozio, asta, eredità…)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Button(
-            onClick = { onSave(item.copy(quantity = quantity, grade = grade, issueYear = year.trim(), notes = notes.trim())) },
+            onClick = {
+                onSave(
+                    item.copy(
+                        quantity = quantity,
+                        grade = grade,
+                        issueYear = year.trim(),
+                        notes = notes.trim(),
+                        purchasePrice = parsePrice(price),
+                        purchaseDate = purchaseDate.trim(),
+                        provenance = provenance.trim(),
+                    )
+                )
+            },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Salva") }
     }
+}
+
+/** Accepts "12,50", "12.50" and "1.234,50". */
+private fun parsePrice(s: String): Double? {
+    val t = s.trim()
+    if (t.isEmpty()) return null
+    val normalized = if (t.contains(',')) t.replace(".", "").replace(',', '.') else t
+    return normalized.toDoubleOrNull()
 }
