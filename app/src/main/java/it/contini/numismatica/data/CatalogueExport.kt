@@ -144,12 +144,12 @@ object CatalogueExport {
         blank()
 
         row(Cell.Text("In breve", Style.BOLD), Cell.Text("", Style.BOLD), Cell.Text("", Style.BOLD), Cell.Text("", Style.BOLD))
-        row(text("Doppioni (pezzi oltre il primo)"), Cell.Num((pieces - entries.size).toDouble(), Style.INTEGER))
-        row(text("Monete"), Cell.Num(entries.count { it.item.category == Categories.COIN }.toDouble(), Style.INTEGER))
-        row(text("Banconote"), Cell.Num(entries.count { it.item.category == Categories.BANKNOTE }.toDouble(), Style.INTEGER))
-        row(text("Esonumia"), Cell.Num(entries.count { it.item.category == Categories.EXONUMIA }.toDouble(), Style.INTEGER))
-        row(text("Ancora in corso legale"), Cell.Num(entries.count { status(it) == "In corso" }.toDouble(), Style.INTEGER))
-        row(text("Fuori corso"), Cell.Num(entries.count { status(it) == "Fuori corso" }.toDouble(), Style.INTEGER))
+        row(text("Doppioni (pezzi oltre il primo)"), Cell.Num((pieces - entries.size).toDouble(), Style.INTEGER_LEFT))
+        row(text("Monete"), Cell.Num(entries.count { it.item.category == Categories.COIN }.toDouble(), Style.INTEGER_LEFT))
+        row(text("Banconote"), Cell.Num(entries.count { it.item.category == Categories.BANKNOTE }.toDouble(), Style.INTEGER_LEFT))
+        row(text("Esonumia"), Cell.Num(entries.count { it.item.category == Categories.EXONUMIA }.toDouble(), Style.INTEGER_LEFT))
+        row(text("Ancora in corso legale"), Cell.Num(entries.count { status(it) == "In corso" }.toDouble(), Style.INTEGER_LEFT))
+        row(text("Fuori corso"), Cell.Num(entries.count { status(it) == "Fuori corso" }.toDouble(), Style.INTEGER_LEFT))
         oldest?.let { e ->
             row(text("Pezzo più antico"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.item.issuerName}"))
         }
@@ -158,7 +158,7 @@ object CatalogueExport {
         }
         entries.filter { it.item.mintage != null }.minByOrNull { it.item.mintage ?: Long.MAX_VALUE }?.let { e ->
             val what = listOf(e.item.title, e.item.issueYear).filter { it.isNotBlank() }.joinToString(" · ")
-            row(text("Tiratura più bassa"), Cell.Num((e.item.mintage ?: 0L).toDouble(), Style.INTEGER), text(what))
+            row(text("Tiratura più bassa"), Cell.Num((e.item.mintage ?: 0L).toDouble(), Style.INTEGER_LEFT), text(what))
         }
 
         // ---- breakdowns ----

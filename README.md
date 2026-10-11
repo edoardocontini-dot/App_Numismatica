@@ -3,9 +3,11 @@
 App Android (in italiano) per cercare monete, banconote ed esonumia nel catalogo [Numista](https://it.numista.com)
 e tenere traccia della propria collezione.
 
-- **Cerca**: testo, paese, tipo, anno; spunta "Ce l'ho" per aggiungere un pezzo.
+- **Cerca**: testo, paese, tipo, anno; spunta "Ce l'ho" per aggiungere un pezzo con anno (menu con
+  millesimi, segni di zecca e tirature da Numista), conservazione, quantità, provenienza e note.
 - **Scheda**: foto dritto/rovescio, materiale, peso, misure, stato (in corso / fuori corso), zecca, legende.
-- **Collezione**: filtri per paese, tipo, materiale, stato, periodo; quantità, conservazione e note per ogni pezzo.
+- **Collezione**: filtri per paese, tipo, materiale, stato, periodo.
+- **Excel**: catalogo completo (foglio "Collezione") + foglio "Statistiche".
 - **Impostazioni**: chiave API Numista, contatore richieste mensili, backup/ripristino in JSON.
 
 La collezione è salvata solo sul telefono. I dati del catalogo sono forniti da Numista

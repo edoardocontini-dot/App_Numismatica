@@ -13,7 +13,7 @@ object XlsxWriter {
     /** Cell styles defined in styles.xml (index = position in cellXfs). */
     enum class Style(val index: Int) {
         DEFAULT(0), HEADER(1), WRAP(2), LINK(3), DECIMAL(4), EURO(5), TITLE(6), BOLD(7), INTEGER(8), BOLD_EURO(9),
-        PERCENT(10), BIG_NUMBER(11), MUTED(12), BOLD_RIGHT(13)
+        PERCENT(10), BIG_NUMBER(11), MUTED(12), BOLD_RIGHT(13), INTEGER_LEFT(14)
     }
 
     sealed class Cell {
@@ -238,7 +238,7 @@ object XlsxWriter {
         """<border><left/><right/><top/><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border>""" +
         "</borders>" +
         """<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>""" +
-        """<cellXfs count="14">""" +
+        """<cellXfs count="15">""" +
         // 0 default (top aligned)
         """<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>""" +
         // 1 header
@@ -256,7 +256,7 @@ object XlsxWriter {
         // 7 bold with bottom border (section heading)
         """<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>""" +
         // 8 integer
-        """<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>""" +
+        """<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>""" +
         // 9 bold euro (totals)
         """<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>""" +
         // 10 percent
@@ -267,6 +267,8 @@ object XlsxWriter {
         """<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1"/>""" +
         // 13 bold right-aligned with bottom border (column headings over numbers)
         """<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>""" +
+        // 14 integer with thousands separator, left-aligned (overview values)
+        """<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="left"/></xf>""" +
         "</cellXfs>" +
         """<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>""" +
         "</styleSheet>"
