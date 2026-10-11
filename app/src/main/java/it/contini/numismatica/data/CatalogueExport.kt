@@ -4,17 +4,17 @@ import it.contini.numismatica.data.XlsxWriter.Cell
 import it.contini.numismatica.data.XlsxWriter.Column
 import it.contini.numismatica.data.XlsxWriter.Sheet
 import it.contini.numismatica.data.XlsxWriter.Style
-import it.contini.numismatica.data.XlsxWriter.num
 import it.contini.numismatica.data.XlsxWriter.text
 import java.io.OutputStream
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 /**
  * Builds the Excel catalogue of the collection.
- * Sheet 1 "Collezione": one row per piece type with catalogue data + personal data.
- * Sheet 2 "Riepilogo": totals by country, type, material and century.
+ * Sheet 1 "Collezione": one row per piece type with catalogue data + Dad's own data.
+ * Sheet 2 "Statistiche": overview and breakdowns (country, century, type, material, status, grade, year added).
  * Pure JVM code (no Android), unit-tested.
  */
 object CatalogueExport {
@@ -28,7 +28,8 @@ object CatalogueExport {
         Column("Denominazione", 34.0),
         Column("Valore nominale", 14.0),
         Column("Valuta", 16.0),
-        Column("Anno esemplare", 11.0),
+        Column("Anno esemplare", 13.0),
+        Column("Tiratura", 13.0),
         Column("Periodo di emissione", 14.0),
         Column("Secolo", 12.0),
         Column("Autorità / Sovrano", 22.0),
@@ -44,10 +45,7 @@ object CatalogueExport {
         Column("Fuori corso dal", 13.0),
         Column("Conservazione", 13.0),
         Column("Quantità", 9.0),
-        Column("Prezzo d'acquisto", 13.0),
-        Column("Totale pagato", 13.0),
-        Column("Data acquisto", 12.0),
-        Column("Provenienza", 20.0),
+        Column("Provenienza", 22.0),
         Column("Note", 36.0),
         Column("Dritto", 40.0),
         Column("Rovescio", 40.0),
@@ -62,19 +60,22 @@ object CatalogueExport {
         val sorted = entries.sortedWith(
             compareBy<Entry>({ it.item.issuerName.lowercase(Locale.ITALIAN) }, { it.item.minYear ?: Int.MAX_VALUE }, { it.item.title.lowercase() })
         )
-        XlsxWriter.write(out, listOf(collectionSheet(sorted), summarySheet(sorted, now)))
+        XlsxWriter.write(out, listOf(collectionSheet(sorted), statisticsSheet(sorted, now)))
     }
+
+    private fun status(e: Entry): String = when (e.detail?.demonetized ?: e.item.demonetized) {
+        true -> "Fuori corso"
+        false -> "In corso"
+        null -> ""
+    }
+
+    private fun material(e: Entry): String = e.detail?.composition ?: e.item.composition ?: ""
 
     private fun collectionSheet(entries: List<Entry>): Sheet {
         val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.ITALIAN)
         val rows = entries.mapIndexed { i, e ->
             val o = e.item
             val d = e.detail
-            val status = when (d?.demonetized ?: o.demonetized) {
-                true -> "Fuori corso"
-                false -> "In corso"
-                null -> ""
-            }
             listOf(
                 Cell.Num((i + 1).toDouble(), Style.INTEGER),
                 text(o.issuerName),
@@ -83,24 +84,22 @@ object CatalogueExport {
                 text(d?.valueText),
                 text(d?.currency),
                 text(o.issueYear),
+                o.mintage?.let { Cell.Num(it.toDouble(), Style.INTEGER) } ?: Cell.Empty,
                 text(yearsLabel(o.minYear, o.maxYear)),
                 text(centuryLabel(o.minYear ?: o.maxYear)),
                 text(d?.rulers?.joinToString(", "), Style.WRAP),
                 text(d?.mints?.joinToString(", "), Style.WRAP),
-                text(d?.composition ?: o.composition, Style.WRAP),
+                text(material(e), Style.WRAP),
                 numOrText(d?.weight, Style.DECIMAL),
                 numOrText(d?.size, Style.DECIMAL),
                 numOrText(d?.thickness, Style.DECIMAL),
                 text(d?.shape),
                 text(d?.technique),
                 text(d?.edge, Style.WRAP),
-                text(status),
+                text(status(e)),
                 text(italianDate(d?.demonetizationDate)),
                 text(o.grade),
                 Cell.Num(o.quantity.toDouble(), Style.INTEGER),
-                num(o.purchasePrice, Style.EURO),
-                num(o.purchasePrice?.let { it * o.quantity }, Style.EURO),
-                text(o.purchaseDate),
                 text(o.provenance, Style.WRAP),
                 text(o.notes, Style.WRAP),
                 text(side(d?.obverseDescription, d?.obverseLettering), Style.WRAP),
@@ -115,55 +114,107 @@ object CatalogueExport {
         return Sheet("Collezione", COLUMNS, rows)
     }
 
-    private fun summarySheet(entries: List<Entry>, now: Date): Sheet {
+    private fun statisticsSheet(entries: List<Entry>, now: Date): Sheet {
         val rows = mutableListOf<List<Cell>>()
+        val bars = mutableListOf<String>()
+        fun row(vararg cells: Cell) { rows.add(cells.toList()) }
+        fun blank() { rows.add(emptyList()) }
+
         val stamp = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ITALIAN).format(now)
-        val spent = entries.sumOf { (it.item.purchasePrice ?: 0.0) * it.item.quantity }
-        val priced = entries.count { it.item.purchasePrice != null }
+        val pieces = entries.sumOf { it.item.quantity }
+        val countries = entries.map { it.item.issuerName }.filter { it.isNotBlank() }.distinct().size
+        val centuries = entries.mapNotNull { e -> (e.item.minYear ?: e.item.maxYear)?.let { centuryLabel(it) } }.distinct().size
+        val dated = entries.filter { (it.item.minYear ?: it.item.maxYear) != null }
+        val oldest = dated.minByOrNull { it.item.minYear ?: it.item.maxYear ?: 0 }
+        val newest = dated.maxByOrNull { it.item.maxYear ?: it.item.minYear ?: 0 }
 
-        rows.add(listOf(Cell.Text("Catalogo della collezione", Style.TITLE)))
-        rows.add(listOf(Cell.Text("Generato il $stamp con l'app Numismatica · dati catalogo forniti da Numista")))
-        rows.add(emptyList())
-        rows.add(listOf(Cell.Text("Totali", Style.BOLD), Cell.Text("", Style.BOLD)))
-        rows.add(listOf(text("Tipi diversi"), Cell.Num(entries.size.toDouble(), Style.INTEGER)))
-        rows.add(listOf(text("Pezzi totali"), Cell.Num(entries.sumOf { it.item.quantity }.toDouble(), Style.INTEGER)))
-        rows.add(listOf(text("Paesi / emittenti"), Cell.Num(entries.map { it.item.issuerName }.distinct().size.toDouble(), Style.INTEGER)))
-        rows.add(listOf(text("Spesa registrata"), Cell.Num(spent, Style.BOLD_EURO), text("su $priced tipi con prezzo indicato")))
+        row(Cell.Text("Statistiche della collezione", Style.TITLE))
+        row(Cell.Text("Aggiornate al $stamp · dati di catalogo forniti da Numista", Style.MUTED))
+        blank()
 
-        fun section(title: String, keyOf: (Entry) -> String, order: Comparator<String>? = null) {
-            rows.add(emptyList())
-            rows.add(listOf(
-                Cell.Text(title, Style.BOLD), Cell.Text("Tipi", Style.BOLD),
-                Cell.Text("Pezzi", Style.BOLD), Cell.Text("Spesa", Style.BOLD),
-            ))
-            val groups = entries.groupBy { keyOf(it).ifBlank { "Non indicato" } }
-            val keys = if (order != null) groups.keys.sortedWith(order)
-            else groups.keys.sortedByDescending { k -> groups.getValue(k).sumOf { it.item.quantity } }
-            keys.forEach { k ->
-                val g = groups.getValue(k)
-                rows.add(listOf(
-                    text(k),
-                    Cell.Num(g.size.toDouble(), Style.INTEGER),
-                    Cell.Num(g.sumOf { it.item.quantity }.toDouble(), Style.INTEGER),
-                    Cell.Num(g.sumOf { (it.item.purchasePrice ?: 0.0) * it.item.quantity }, Style.EURO),
-                ))
-            }
+        // ---- overview: big figures ----
+        row(
+            Cell.Num(entries.size.toDouble(), Style.BIG_NUMBER), Cell.Num(pieces.toDouble(), Style.BIG_NUMBER),
+            Cell.Num(countries.toDouble(), Style.BIG_NUMBER), Cell.Num(centuries.toDouble(), Style.BIG_NUMBER),
+        )
+        row(
+            Cell.Text("tipi diversi", Style.MUTED), Cell.Text("pezzi in totale", Style.MUTED),
+            Cell.Text("paesi / emittenti", Style.MUTED), Cell.Text("secoli rappresentati", Style.MUTED),
+        )
+        blank()
+
+        row(Cell.Text("In breve", Style.BOLD), Cell.Text("", Style.BOLD), Cell.Text("", Style.BOLD), Cell.Text("", Style.BOLD))
+        row(text("Doppioni (pezzi oltre il primo)"), Cell.Num((pieces - entries.size).toDouble(), Style.INTEGER))
+        row(text("Monete"), Cell.Num(entries.count { it.item.category == Categories.COIN }.toDouble(), Style.INTEGER))
+        row(text("Banconote"), Cell.Num(entries.count { it.item.category == Categories.BANKNOTE }.toDouble(), Style.INTEGER))
+        row(text("Esonumia"), Cell.Num(entries.count { it.item.category == Categories.EXONUMIA }.toDouble(), Style.INTEGER))
+        row(text("Ancora in corso legale"), Cell.Num(entries.count { status(it) == "In corso" }.toDouble(), Style.INTEGER))
+        row(text("Fuori corso"), Cell.Num(entries.count { status(it) == "Fuori corso" }.toDouble(), Style.INTEGER))
+        oldest?.let { e ->
+            row(text("Pezzo più antico"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.item.issuerName}"))
+        }
+        newest?.let { e ->
+            row(text("Pezzo più recente"), text(yearsLabel(e.item.minYear, e.item.maxYear)), text("${e.item.title} · ${e.item.issuerName}"))
+        }
+        entries.filter { it.item.mintage != null }.minByOrNull { it.item.mintage ?: Long.MAX_VALUE }?.let { e ->
+            val what = listOf(e.item.title, e.item.issueYear).filter { it.isNotBlank() }.joinToString(" · ")
+            row(text("Tiratura più bassa"), Cell.Num((e.item.mintage ?: 0L).toDouble(), Style.INTEGER), text(what))
         }
 
-        section("Per paese", { it.item.issuerName }, compareBy { it.lowercase(Locale.ITALIAN) })
-        section("Per tipo", { Categories.label(it.item.category) })
+        // ---- breakdowns ----
+        fun section(title: String, keyOf: (Entry) -> String, order: Comparator<String>? = null, limit: Int = Int.MAX_VALUE) {
+            blank()
+            row(
+                Cell.Text(title, Style.BOLD), Cell.Text("Tipi", Style.BOLD_RIGHT),
+                Cell.Text("Pezzi", Style.BOLD_RIGHT), Cell.Text("% pezzi", Style.BOLD_RIGHT),
+            )
+            val groups = entries.groupBy { keyOf(it).ifBlank { "Non indicato" } }
+            val byPieces = compareByDescending<String> { k -> groups.getValue(k).sumOf { it.item.quantity } }.thenBy { it }
+            val keys = groups.keys.sortedWith(order ?: byPieces)
+            val first = rows.size + 1 // 1-based row number of the first data row
+            keys.take(limit).forEach { k ->
+                val g = groups.getValue(k)
+                val n = g.sumOf { it.item.quantity }
+                row(
+                    text(k),
+                    Cell.Num(g.size.toDouble(), Style.INTEGER),
+                    Cell.Num(n.toDouble(), Style.INTEGER),
+                    Cell.Num(if (pieces == 0) 0.0 else n.toDouble() / pieces, Style.PERCENT),
+                )
+            }
+            if (keys.size > limit) {
+                val rest = keys.drop(limit).flatMap { groups.getValue(it) }
+                val n = rest.sumOf { it.item.quantity }
+                row(
+                    Cell.Text("Altri ${keys.size - limit}", Style.MUTED),
+                    Cell.Num(rest.size.toDouble(), Style.INTEGER),
+                    Cell.Num(n.toDouble(), Style.INTEGER),
+                    Cell.Num(if (pieces == 0) 0.0 else n.toDouble() / pieces, Style.PERCENT),
+                )
+            }
+            val last = rows.size
+            if (last >= first) bars += "D$first:D$last"
+        }
+
+        val cal = Calendar.getInstance()
+        section("Per paese / emittente", { it.item.issuerName })
         section("Per secolo", { centuryLabel(it.item.minYear ?: it.item.maxYear) }, compareBy { centurySortKey(it) })
-        section("Per materiale", { it.detail?.composition ?: it.item.composition ?: "" })
-        section("Per stato", {
-            when (it.detail?.demonetized ?: it.item.demonetized) { true -> "Fuori corso"; false -> "In corso"; null -> "" }
-        })
+        section("Per tipo", { Categories.label(it.item.category) })
+        section("Per materiale", { material(it) }, limit = 15)
+        section("Per stato", { status(it) })
         section("Per conservazione", { it.item.grade }, compareBy { g -> GRADES.indexOf(g).let { i -> if (i < 0) 99 else i } })
+        section("Per provenienza", { it.item.provenance.trim() }, limit = 10)
+        section("Per anno di inserimento", {
+            cal.timeInMillis = it.item.addedAt
+            cal.get(Calendar.YEAR).toString()
+        }, compareBy { it })
 
         return Sheet(
-            "Riepilogo",
-            listOf(Column("", 30.0), Column("", 14.0), Column("", 12.0), Column("", 14.0)),
+            "Statistiche",
+            listOf(Column("", 34.0), Column("", 16.0), Column("", 16.0), Column("", 18.0)),
             rows,
             headerRow = false,
+            dataBars = bars,
         )
     }
 
@@ -186,12 +237,11 @@ object CatalogueExport {
         return if (year > 0) "${roman((year - 1) / 100 + 1)} sec." else "${roman((-year - 1) / 100 + 1)} sec. a.C."
     }
 
-    /** Sorts B.C. centuries before A.D. ones, oldest first. */
+    /** Sorts B.C. centuries before A.D. ones, oldest first; "Non indicato" last. */
     private fun centurySortKey(label: String): Int {
         if (label.isBlank() || label == "Non indicato") return Int.MAX_VALUE
-        val bc = label.endsWith("a.C.")
         val n = fromRoman(label.substringBefore(' '))
-        return if (bc) -n else n
+        return if (label.endsWith("a.C.")) -n else n
     }
 
     private val ROMAN = listOf(

@@ -41,6 +41,15 @@ data class TypeDetail(
 
 data class Issuer(val code: String, val name: String)
 
+/** One issue of a type: a specific year (and mint mark) with its mintage. */
+data class Issue(
+    val id: Long,
+    val label: String,
+    val sortYear: Int?,
+    val mintage: Long?,
+    val comment: String?,
+)
+
 data class SearchPage(val total: Int, val items: List<TypeSummary>)
 
 /** A piece in Dad's collection, stored on the phone. */
@@ -66,6 +75,8 @@ data class OwnedItem(
     val purchaseDate: String = "",
     /** Where it came from: dealer, auction, inheritance, change… */
     val provenance: String = "",
+    /** Mintage of the chosen year/issue, from Numista. */
+    val mintage: Long? = null,
 )
 
 object Categories {
@@ -82,7 +93,10 @@ object Categories {
 }
 
 /** Common Italian grading scale. */
-val GRADES = listOf("", "B", "MB", "BB", "SPL", "q.FDC", "FDC", "FS (Fondo Specchio)")
+val GRADES = listOf("", "B", "MB", "q.BB", "BB", "q.SPL", "SPL", "q.FDC", "FDC", "FS (Fondo Specchio)")
+
+/** 25000000 -> "25.000.000" */
+fun formatThousands(n: Long): String = String.format(java.util.Locale.ITALIAN, "%,d", n)
 
 fun yearsLabel(minYear: Int?, maxYear: Int?): String = when {
     minYear == null && maxYear == null -> ""

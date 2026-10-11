@@ -12,7 +12,8 @@ object XlsxWriter {
 
     /** Cell styles defined in styles.xml (index = position in cellXfs). */
     enum class Style(val index: Int) {
-        DEFAULT(0), HEADER(1), WRAP(2), LINK(3), DECIMAL(4), EURO(5), TITLE(6), BOLD(7), INTEGER(8), BOLD_EURO(9)
+        DEFAULT(0), HEADER(1), WRAP(2), LINK(3), DECIMAL(4), EURO(5), TITLE(6), BOLD(7), INTEGER(8), BOLD_EURO(9),
+        PERCENT(10), BIG_NUMBER(11), MUTED(12), BOLD_RIGHT(13)
     }
 
     sealed class Cell {
@@ -30,6 +31,8 @@ object XlsxWriter {
         val columns: List<Column>,
         val rows: List<List<Cell>>,
         val headerRow: Boolean = true,
+        /** Ranges such as "D10:D25" that get an in-cell bar proportional to the value. */
+        val dataBars: List<String> = emptyList(),
     )
 
     fun text(s: String?, style: Style = Style.DEFAULT): Cell = if (s.isNullOrBlank()) Cell.Empty else Cell.Text(s, style)
@@ -148,6 +151,10 @@ object XlsxWriter {
         if (s.headerRow && s.columns.isNotEmpty()) {
             append("""<autoFilter ref="A1:${col(s.columns.size)}${maxOf(lastRow, 1)}"/>""")
         }
+        s.dataBars.forEachIndexed { i, ref ->
+            append("""<conditionalFormatting sqref="$ref"><cfRule type="dataBar" priority="${i + 1}"><dataBar>""")
+            append("""<cfvo type="num" val="0"/><cfvo type="max"/><color rgb="FF7FB8A8"/></dataBar></cfRule></conditionalFormatting>""")
+        }
         append("""<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>""")
         append("""<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>""")
         append("</worksheet>")
@@ -211,13 +218,15 @@ object XlsxWriter {
     // borders: 0 none, 1 thin bottom
     private val STYLES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""" +
         """<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""" +
-        """<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00\ &quot;€&quot;"/></numFmts>""" +
-        """<fonts count="5">""" +
+        """<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00\ &quot;€&quot;"/><numFmt numFmtId="165" formatCode="0.0%"/></numFmts>""" +
+        """<fonts count="7">""" +
         """<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>""" +
         """<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>""" +
         """<font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>""" +
         """<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/><family val="2"/></font>""" +
         """<font><b/><sz val="16"/><color rgb="FF1F5A4C"/><name val="Calibri"/><family val="2"/></font>""" +
+        """<font><b/><sz val="20"/><color rgb="FF1F5A4C"/><name val="Calibri"/><family val="2"/></font>""" +
+        """<font><i/><sz val="10"/><color rgb="FF7F7F7F"/><name val="Calibri"/><family val="2"/></font>""" +
         "</fonts>" +
         """<fills count="3">""" +
         """<fill><patternFill patternType="none"/></fill>""" +
@@ -229,7 +238,7 @@ object XlsxWriter {
         """<border><left/><right/><top/><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border>""" +
         "</borders>" +
         """<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>""" +
-        """<cellXfs count="10">""" +
+        """<cellXfs count="14">""" +
         // 0 default (top aligned)
         """<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>""" +
         // 1 header
@@ -250,6 +259,14 @@ object XlsxWriter {
         """<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>""" +
         // 9 bold euro (totals)
         """<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>""" +
+        // 10 percent
+        """<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>""" +
+        // 11 big number (overview figures)
+        """<xf numFmtId="3" fontId="5" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment horizontal="left"/></xf>""" +
+        // 12 muted italic
+        """<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1"/>""" +
+        // 13 bold right-aligned with bottom border (column headings over numbers)
+        """<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>""" +
         "</cellXfs>" +
         """<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>""" +
         "</styleSheet>"

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import it.contini.numismatica.data.CatalogueExport
+import it.contini.numismatica.data.Issue
 import it.contini.numismatica.data.Issuer
 import it.contini.numismatica.data.NumistaApi
 import it.contini.numismatica.data.OwnedItem
@@ -21,6 +22,20 @@ import java.time.LocalDate
 
 enum class OwnedFilter { ALL, OWNED, MISSING }
 
+/** What Dad fills in when adding or editing a piece. */
+data class OwnedForm(
+    val quantity: Int = 1,
+    val grade: String = "",
+    val issueYear: String = "",
+    val mintage: Long? = null,
+    val provenance: String = "",
+    val notes: String = "",
+) {
+    companion object {
+        fun of(item: OwnedItem) = OwnedForm(item.quantity, item.grade, item.issueYear, item.mintage, item.provenance, item.notes)
+    }
+}
+
 data class SearchFilters(
     val query: String = "",
     val issuer: Issuer? = null,
@@ -28,7 +43,7 @@ data class SearchFilters(
     val year: String = "",
     val owned: OwnedFilter = OwnedFilter.ALL,
 ) {
-    val hasCriteria get() = query.isNotBlank() || issuer != null || year.isNotBlank()
+    val hasCriteria get() = query.isNotBlank() || issuer != null || year.trim().toIntOrNull() != null
 }
 
 data class SearchState(
@@ -113,7 +128,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadPage(page: Int) = viewModelScope.launch {
         val f = search.value.filters
         try {
-            val result = repo.search(f.query, f.issuer?.code, f.category, f.year, page)
+            val year = f.year.trim().toIntOrNull()?.toString()
+            val result = repo.search(f.query, f.issuer?.code, f.category, year, page)
             search.update {
                 it.copy(
                     results = (it.results + result.items).distinctBy { t -> t.id },
@@ -151,54 +167,70 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- collection ----------
 
-    fun isOwned(id: Long) = owned.value.any { it.typeId == id }
-
-    /** Tick from the search list: add with basic data, then complete it with the details. */
-    fun addFromSummary(t: TypeSummary) = viewModelScope.launch {
-        val base = newItem(t, composition = null, demonetized = null)
-        repo.saveOwned(base)
-        refreshOwned().join()
-        val detail = runCatching { repo.type(t.id) }.getOrNull()
+    /** Years / mint marks of a type, for the year menu. */
+    suspend fun loadIssues(typeId: Long): Result<List<Issue>> {
+        val r = runCatching { repo.issues(typeId) }
         refreshCounter()
-        if (detail != null) {
-            val current = owned.value.firstOrNull { it.typeId == t.id } ?: return@launch
-            repo.saveOwned(current.copy(composition = detail.composition, demonetized = detail.demonetized))
-            refreshOwned()
+        return r
+    }
+
+    /**
+     * Adds a piece with what Dad entered in the "Aggiungi" form. If the catalogue details are not
+     * known yet they are fetched afterwards (material, circulation status).
+     */
+    fun addToCollection(t: TypeSummary, form: OwnedForm, detail: TypeDetail?) = viewModelScope.launch {
+        val item = OwnedItem(
+            typeId = t.id,
+            title = t.title,
+            category = t.category,
+            issuerCode = t.issuerCode,
+            issuerName = t.issuerName,
+            minYear = t.minYear,
+            maxYear = t.maxYear,
+            thumb = t.obverseThumb,
+            composition = detail?.composition,
+            demonetized = detail?.demonetized,
+            quantity = form.quantity,
+            grade = form.grade,
+            notes = form.notes.trim(),
+            issueYear = form.issueYear.trim(),
+            addedAt = System.currentTimeMillis(),
+            provenance = form.provenance.trim(),
+            mintage = form.mintage,
+        )
+        repo.saveOwned(item)
+        refreshOwned().join()
+        message.value = "Aggiunto alla collezione"
+        if (detail == null) {
+            val d = runCatching { repo.type(t.id) }.getOrNull()
+            refreshCounter()
+            if (d != null) {
+                val current = owned.value.firstOrNull { it.typeId == t.id } ?: return@launch
+                repo.saveOwned(current.copy(composition = d.composition, demonetized = d.demonetized))
+                refreshOwned()
+            }
         }
     }
 
-    fun addFromDetail(d: TypeDetail) = viewModelScope.launch {
-        repo.saveOwned(newItem(d.summary, d.composition, d.demonetized))
+    fun update(item: OwnedItem, form: OwnedForm) = viewModelScope.launch {
+        repo.saveOwned(
+            item.copy(
+                quantity = form.quantity,
+                grade = form.grade,
+                issueYear = form.issueYear.trim(),
+                mintage = form.mintage,
+                provenance = form.provenance.trim(),
+                notes = form.notes.trim(),
+            )
+        )
         refreshOwned()
-    }
-
-    fun save(item: OwnedItem) = viewModelScope.launch {
-        repo.saveOwned(item)
-        refreshOwned()
+        message.value = "Salvato"
     }
 
     fun remove(typeId: Long) = viewModelScope.launch {
         repo.removeOwned(typeId)
         refreshOwned()
     }
-
-    private fun newItem(t: TypeSummary, composition: String?, demonetized: Boolean?) = OwnedItem(
-        typeId = t.id,
-        title = t.title,
-        category = t.category,
-        issuerCode = t.issuerCode,
-        issuerName = t.issuerName,
-        minYear = t.minYear,
-        maxYear = t.maxYear,
-        thumb = t.obverseThumb,
-        composition = composition,
-        demonetized = demonetized,
-        quantity = 1,
-        grade = "",
-        notes = "",
-        issueYear = "",
-        addedAt = System.currentTimeMillis(),
-    )
 
     fun filteredOwned(items: List<OwnedItem>, f: CollectionFilters): List<OwnedItem> {
         val from = f.yearFrom.trim().toIntOrNull()

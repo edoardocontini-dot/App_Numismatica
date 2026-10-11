@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CollectionsBookmark
@@ -56,6 +58,7 @@ private val tabs = listOf(
     Tab("settings", "Impostazioni", Icons.Filled.Settings),
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun App(vm: AppViewModel = viewModel()) {
     val nav = rememberNavController()
@@ -100,7 +103,7 @@ private fun App(vm: AppViewModel = viewModel()) {
         NavHost(
             navController = nav,
             startDestination = start,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable("search") {
                 SearchScreen(vm, openDetail = { nav.navigate("detail/$it") })

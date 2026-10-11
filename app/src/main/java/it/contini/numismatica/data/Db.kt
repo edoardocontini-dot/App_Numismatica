@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /** Local storage: the collection plus caches of Numista answers (to save API requests). */
-class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 2) {
+class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -30,7 +30,8 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 2
                 added_at INTEGER NOT NULL,
                 purchase_price REAL,
                 purchase_date TEXT NOT NULL DEFAULT '',
-                provenance TEXT NOT NULL DEFAULT ''
+                provenance TEXT NOT NULL DEFAULT '',
+                mintage INTEGER
             )
             """.trimIndent()
         )
@@ -42,6 +43,9 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 2
             db.execSQL("ALTER TABLE owned ADD COLUMN purchase_price REAL")
             db.execSQL("ALTER TABLE owned ADD COLUMN purchase_date TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE owned ADD COLUMN provenance TEXT NOT NULL DEFAULT ''")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE owned ADD COLUMN mintage INTEGER")
         }
     }
 
@@ -110,6 +114,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 2
         if (purchasePrice != null) put("purchase_price", purchasePrice) else putNull("purchase_price")
         put("purchase_date", purchaseDate)
         put("provenance", provenance)
+        if (mintage != null) put("mintage", mintage) else putNull("mintage")
     }
 
     private fun Cursor.toOwned(): OwnedItem {
@@ -134,6 +139,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "numismatica.db", null, 2
             purchasePrice = getColumnIndexOrThrow("purchase_price").let { if (isNull(it)) null else getDouble(it) },
             purchaseDate = s("purchase_date") ?: "",
             provenance = s("provenance") ?: "",
+            mintage = getColumnIndexOrThrow("mintage").let { if (isNull(it)) null else getLong(it) },
         )
     }
 }

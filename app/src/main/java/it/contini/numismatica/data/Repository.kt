@@ -39,19 +39,40 @@ class Repository(context: Context) {
 
     // ---------- catalogue ----------
 
+    /** Language sent to Numista. Starts with Italian; switches to English for good if Numista refuses it. */
+    private val lang: String get() = prefs.getString("lang", NumistaApi.DEFAULT_LANG) ?: NumistaApi.DEFAULT_LANG
+
+    private suspend fun fetchLocalized(maxAgeMs: Long, url: (String) -> String): String {
+        val current = lang
+        return try {
+            fetch(url(current), maxAgeMs)
+        } catch (e: ApiException) {
+            if (current != "en" && (e.code == 400 || e.code == 422)) {
+                prefs.edit().putString("lang", "en").apply()
+                fetch(url("en"), maxAgeMs)
+            } else {
+                throw e
+            }
+        }
+    }
+
     suspend fun search(query: String, issuer: String?, category: String?, year: String?, page: Int): SearchPage {
-        val url = NumistaApi.searchUrl(query, issuer, category, year, page)
-        val body = fetch(url, maxAgeMs = 14 * DAY)
+        val body = fetchLocalized(14 * DAY) { l -> NumistaApi.searchUrl(query, issuer, category, year, page, l) }
         return withContext(Dispatchers.Default) { NumistaApi.parseSearch(body) }
     }
 
     suspend fun type(id: Long): TypeDetail {
-        val body = fetch(NumistaApi.typeUrl(id), maxAgeMs = 180 * DAY)
+        val body = fetchLocalized(180 * DAY) { l -> NumistaApi.typeUrl(id, l) }
         return withContext(Dispatchers.Default) { NumistaApi.parseType(body) }
     }
 
+    suspend fun issues(id: Long): List<Issue> {
+        val body = fetchLocalized(180 * DAY) { l -> NumistaApi.issuesUrl(id, l) }
+        return withContext(Dispatchers.Default) { NumistaApi.parseIssues(body) }
+    }
+
     suspend fun issuers(): List<Issuer> {
-        val body = fetch(NumistaApi.issuersUrl(), maxAgeMs = 60 * DAY)
+        val body = fetchLocalized(60 * DAY) { l -> NumistaApi.issuersUrl(l) }
         return withContext(Dispatchers.Default) { NumistaApi.parseIssuers(body) }
     }
 
@@ -75,9 +96,12 @@ class Repository(context: Context) {
         var networkOk = true
         return items.mapIndexed { i, item ->
             onProgress(i, items.size)
-            val url = NumistaApi.typeUrl(item.typeId)
-            val body = withContext(Dispatchers.IO) { db.cachedAnyAge(url) } ?: if (networkOk) {
-                runCatching { fetch(url, maxAgeMs = 180 * DAY) }.onFailure { networkOk = false }.getOrNull()
+            val cachedBody = withContext(Dispatchers.IO) {
+                db.cachedAnyAge(NumistaApi.typeUrl(item.typeId, lang)) ?: db.cachedAnyAge(NumistaApi.typeUrl(item.typeId, "en"))
+            }
+            val body = cachedBody ?: if (networkOk) {
+                runCatching { fetchLocalized(180 * DAY) { l -> NumistaApi.typeUrl(item.typeId, l) } }
+                    .onFailure { networkOk = false }.getOrNull()
             } else null
             val detail = body?.let { b -> runCatching { NumistaApi.parseType(b) }.getOrNull() }
             CatalogueExport.Entry(item, detail)
@@ -108,6 +132,7 @@ class Repository(context: Context) {
                 put("purchase_price", it.purchasePrice ?: JSONObject.NULL)
                 put("purchase_date", it.purchaseDate)
                 put("provenance", it.provenance)
+                put("mintage", it.mintage ?: JSONObject.NULL)
             })
         }
         JSONObject().put("app", "numismatica").put("version", 1).put("items", arr).toString(2)
@@ -137,6 +162,7 @@ class Repository(context: Context) {
                 purchasePrice = if (o.has("purchase_price") && !o.isNull("purchase_price")) o.optDouble("purchase_price") else null,
                 purchaseDate = o.str("purchase_date") ?: "",
                 provenance = o.str("provenance") ?: "",
+                mintage = o.optString("mintage").trim().toLongOrNull(),
             )
         }.filter { it.typeId > 0 }
         db.replaceAllOwned(items)

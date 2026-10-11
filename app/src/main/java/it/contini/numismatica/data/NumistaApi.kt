@@ -7,7 +7,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class ApiException(message: String) : IOException(message)
+/** [code] is the HTTP status (0 = network problem). */
+class ApiException(message: String, val code: Int = 0) : IOException(message)
 
 /**
  * Minimal client for the Numista API v3 (https://api.numista.com/v3).
@@ -15,11 +16,12 @@ class ApiException(message: String) : IOException(message)
  */
 object NumistaApi {
     private const val BASE = "https://api.numista.com/v3"
-    private const val LANG = "it"
+    /** Numista documents only en / es / fr; "it" is tried first and the app falls back to "en" if refused. */
+    const val DEFAULT_LANG = "it"
     const val PAGE_SIZE = 50
 
-    fun searchUrl(query: String, issuer: String?, category: String?, year: String?, page: Int): String {
-        val params = mutableListOf("lang" to LANG, "page" to page.toString(), "count" to PAGE_SIZE.toString())
+    fun searchUrl(query: String, issuer: String?, category: String?, year: String?, page: Int, lang: String): String {
+        val params = mutableListOf("lang" to lang, "page" to page.toString(), "count" to PAGE_SIZE.toString())
         if (query.isNotBlank()) params += "q" to query.trim()
         if (!issuer.isNullOrBlank()) params += "issuer" to issuer
         if (!category.isNullOrBlank()) params += "category" to category
@@ -27,9 +29,11 @@ object NumistaApi {
         return "$BASE/types?" + params.joinToString("&") { (k, v) -> k + "=" + URLEncoder.encode(v, "UTF-8") }
     }
 
-    fun typeUrl(id: Long) = "$BASE/types/$id?lang=$LANG"
+    fun typeUrl(id: Long, lang: String) = "$BASE/types/$id?lang=$lang"
 
-    fun issuersUrl() = "$BASE/issuers?lang=$LANG"
+    fun issuesUrl(id: Long, lang: String) = "$BASE/types/$id/issues?lang=$lang"
+
+    fun issuersUrl(lang: String) = "$BASE/issuers?lang=$lang"
 
     /** Performs a GET and returns the raw body. Throws [ApiException] with an Italian message. */
     fun get(url: String, apiKey: String): String {
@@ -53,9 +57,10 @@ object NumistaApi {
                 when (code) {
                     401 -> "Chiave API non valida. Controllala in Impostazioni."
                     404 -> "Elemento non trovato su Numista."
-                    429 -> "Limite mensile di richieste Numista raggiunto. Riprova il mese prossimo."
+                    429 -> "Troppe richieste a Numista (limite mensile o richieste troppo ravvicinate). Riprova più tardi."
                     else -> "Errore Numista ($code)" + (detail?.let { ": $it" } ?: "")
-                }
+                },
+                code,
             )
         } catch (e: ApiException) {
             throw e
@@ -120,6 +125,35 @@ object NumistaApi {
             mints = o.optJSONArray("mints").names("name"),
             comments = o.str("comments")?.let { stripHtml(it) },
         )
+    }
+
+    /** Issues of a type = the individual years / mint marks, with mintage. */
+    fun parseIssues(json: String): List<Issue> {
+        val trimmed = json.trim()
+        val arr = if (trimmed.startsWith("[")) JSONArray(trimmed) else JSONObject(trimmed).optJSONArray("issues") ?: JSONArray()
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val year = o.intOrNull("year")
+            val gregorian = o.intOrNull("gregorian_year")
+            val dated = if (o.has("is_dated")) o.optBoolean("is_dated", true) else year != null
+            val yearText = when {
+                dated && year != null && gregorian != null && gregorian != year -> "$year (${yearsLabel(gregorian, gregorian)})"
+                dated && year != null -> yearsLabel(year, year)
+                dated && gregorian != null -> yearsLabel(gregorian, gregorian)
+                else -> {
+                    val range = yearsLabel(o.intOrNull("min_year"), o.intOrNull("max_year"))
+                    if (range.isBlank()) "Senza data" else "Senza data ($range)"
+                }
+            }
+            val mint = o.str("mint_letter")
+            Issue(
+                id = o.optLong("id"),
+                label = if (mint != null) "$yearText $mint" else yearText,
+                sortYear = gregorian ?: year ?: o.intOrNull("min_year"),
+                mintage = o.optString("mintage").trim().toLongOrNull()?.takeIf { it > 0 },
+                comment = o.str("comment")?.let { stripHtml(it) }?.takeIf { it.isNotBlank() },
+            )
+        }.sortedWith(compareBy<Issue>({ it.sortYear ?: Int.MAX_VALUE }, { it.label }))
     }
 
     fun parseIssuers(json: String): List<Issuer> {

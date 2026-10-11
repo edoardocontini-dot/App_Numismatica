@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -60,6 +61,7 @@ fun SettingsScreen(vm: AppViewModel) {
     Column(
         Modifier
             .fillMaxSize()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -114,8 +116,8 @@ fun SettingsScreen(vm: AppViewModel) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Catalogo Excel", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Crea un file Excel con tutta la collezione: un foglio con ogni pezzo (dati di catalogo, " +
-                        "conservazione, prezzo, note, link a Numista) e un foglio di riepilogo per paese, secolo e materiale.",
+                    "Crea un file Excel con tutta la collezione: un foglio con ogni pezzo (dati di catalogo, anno, " +
+                        "tiratura, conservazione, provenienza, note, link a Numista) e un foglio di statistiche.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Button(onClick = { vm.exportExcel() }, enabled = owned.isNotEmpty()) { Text("Esporta in Excel") }

@@ -61,6 +61,7 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
     var showIssuers by remember { mutableStateOf(false) }
     var showYear by remember { mutableStateOf(false) }
     var toRemove by remember { mutableStateOf<TypeSummary?>(null) }
+    var toAdd by remember { mutableStateOf<TypeSummary?>(null) }
 
     val shown = when (f.owned) {
         OwnedFilter.ALL -> state.results
@@ -168,6 +169,12 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
         }
         HorizontalDivider()
 
+        if (state.searched && !state.loading && state.error == null && state.results.isEmpty()) {
+            InfoCard("Nessun risultato. Prova con meno parole o togli qualche filtro.")
+        } else if (f.owned != OwnedFilter.ALL && state.results.isNotEmpty() && shown.isEmpty() && !state.loading) {
+            InfoCard("Nessun pezzo corrisponde al filtro tra i ${state.results.size} risultati caricati.")
+        }
+
         LazyColumn(Modifier.fillMaxSize()) {
             items(shown, key = { it.id }) { t ->
                 val isOwned = t.id in ownedIds
@@ -184,7 +191,7 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
                         if (isOwned) {
                             toRemove = t
                         } else {
-                            vm.addFromSummary(t)
+                            toAdd = t
                         }
                     },
                     onClick = { openDetail(t.id) },
@@ -235,7 +242,11 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { vm.updateFilters { it.copy(year = text) }; showYear = false }) { Text("OK") }
+                TextButton(onClick = {
+                    val y = text.trim().toIntOrNull()?.toString() ?: ""
+                    vm.updateFilters { it.copy(year = y) }
+                    showYear = false
+                }) { Text("OK") }
             },
             dismissButton = {
                 TextButton(onClick = { vm.updateFilters { it.copy(year = "") }; showYear = false }) { Text("Tutti gli anni") }
@@ -245,6 +256,10 @@ fun SearchScreen(vm: AppViewModel, openDetail: (Long) -> Unit) {
 
     toRemove?.let { t ->
         ConfirmRemoveDialog(t.title, onConfirm = { vm.remove(t.id) }, onDismiss = { toRemove = null })
+    }
+
+    toAdd?.let { t ->
+        AddToCollectionDialog(vm, t, detail = null, onDismiss = { toAdd = null })
     }
 }
 

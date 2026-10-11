@@ -1,6 +1,8 @@
 package it.contini.numismatica.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,13 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -42,12 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import it.contini.numismatica.AppViewModel
+import it.contini.numismatica.OwnedForm
 import it.contini.numismatica.data.Categories
-import it.contini.numismatica.data.GRADES
 import it.contini.numismatica.data.OwnedItem
 import it.contini.numismatica.data.TypeDetail
 import it.contini.numismatica.data.italianDate
@@ -62,6 +62,7 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var confirmRemove by remember { mutableStateOf(false) }
+    var showAdd by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) {
         loading = true
@@ -75,6 +76,8 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
+            // The Scaffold already leaves room for the status bar
+            windowInsets = WindowInsets(0, 0, 0, 0),
             title = { Text(title, maxLines = 1) },
             navigationIcon = {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") }
@@ -83,6 +86,7 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
         Column(
             Modifier
                 .fillMaxSize()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
@@ -105,7 +109,7 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
                     enabled = ownedItem != null || detail != null,
                     onCheckedChange = { checked ->
                         if (checked) {
-                            detail?.let { vm.addFromDetail(it) }
+                            showAdd = true
                         } else {
                             confirmRemove = true
                         }
@@ -113,10 +117,10 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
                 )
             }
             if (ownedItem != null) {
-                OwnedEditor(ownedItem, onSave = { vm.save(it); vm.message.value = "Salvato" })
+                OwnedEditor(vm, ownedItem)
             } else {
                 Text(
-                    "Attiva per aggiungerlo alla collezione e annotare quantità, conservazione e note.",
+                    "Attiva per aggiungerlo alla collezione con anno, conservazione, provenienza e note.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -129,6 +133,10 @@ fun DetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit) {
 
     if (confirmRemove) {
         ConfirmRemoveDialog(title, onConfirm = { vm.remove(id) }, onDismiss = { confirmRemove = false })
+    }
+    val d = detail
+    if (showAdd && d != null) {
+        AddToCollectionDialog(vm, d.summary, d, onDismiss = { showAdd = false })
     }
 }
 
@@ -209,97 +217,20 @@ private fun DetailBody(d: TypeDetail) {
 }
 
 @Composable
-private fun OwnedEditor(item: OwnedItem, onSave: (OwnedItem) -> Unit) {
-    var quantity by remember(item.typeId) { mutableStateOf(item.quantity) }
-    var grade by remember(item.typeId) { mutableStateOf(item.grade) }
-    var year by remember(item.typeId) { mutableStateOf(item.issueYear) }
-    var notes by remember(item.typeId) { mutableStateOf(item.notes) }
-    var price by remember(item.typeId) {
-        mutableStateOf(item.purchasePrice?.let { String.format(java.util.Locale.ITALIAN, "%.2f", it) } ?: "")
-    }
-    var purchaseDate by remember(item.typeId) { mutableStateOf(item.purchaseDate) }
-    var provenance by remember(item.typeId) { mutableStateOf(item.provenance) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Quantità", modifier = Modifier.weight(1f))
-            IconButton(onClick = { if (quantity > 1) quantity-- }) { Icon(Icons.Filled.Remove, "Meno") }
-            Text("$quantity", style = MaterialTheme.typography.titleMedium)
-            IconButton(onClick = { quantity++ }) { Icon(Icons.Filled.Add, "Più") }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Conservazione", modifier = Modifier.weight(1f))
-            DropdownChip(
-                label = grade.ifBlank { "Non indicata" },
-                selected = grade.isNotBlank(),
-                options = GRADES.map { it to it.ifBlank { "Non indicata" } },
-                onSelect = { grade = it },
-            )
-        }
-        OutlinedTextField(
-            value = year,
-            onValueChange = { year = it.take(20) },
-            label = { Text("Anno / millesimo del mio esemplare") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth(),
+private fun OwnedEditor(vm: AppViewModel, item: OwnedItem) {
+    var form by remember(item.typeId) { mutableStateOf(OwnedForm.of(item)) }
+    val changed = form != OwnedForm.of(item)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Nella collezione dal " + SimpleDateFormat("dd/MM/yyyy", Locale.ITALIAN).format(Date(item.addedAt)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
-            value = notes,
-            onValueChange = { notes = it },
-            label = { Text("Note") },
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text("Acquisto", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = price,
-                onValueChange = { v -> price = v.filter { it.isDigit() || it == ',' || it == '.' }.take(12) },
-                label = { Text("Prezzo (€)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = purchaseDate,
-                onValueChange = { purchaseDate = it.take(20) },
-                label = { Text("Data") },
-                placeholder = { Text("gg/mm/aaaa") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        OutlinedTextField(
-            value = provenance,
-            onValueChange = { provenance = it.take(200) },
-            label = { Text("Provenienza (negozio, asta, eredità…)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        OwnedFormFields(vm, item.typeId, item.minYear, item.maxYear, form) { form = it }
         Button(
-            onClick = {
-                onSave(
-                    item.copy(
-                        quantity = quantity,
-                        grade = grade,
-                        issueYear = year.trim(),
-                        notes = notes.trim(),
-                        purchasePrice = parsePrice(price),
-                        purchaseDate = purchaseDate.trim(),
-                        provenance = provenance.trim(),
-                    )
-                )
-            },
+            onClick = { vm.update(item, form) },
+            enabled = changed,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Salva") }
+        ) { Text(if (changed) "Salva modifiche" else "Salvato") }
     }
-}
-
-/** Accepts "12,50", "12.50" and "1.234,50". */
-private fun parsePrice(s: String): Double? {
-    val t = s.trim()
-    if (t.isEmpty()) return null
-    val normalized = if (t.contains(',')) t.replace(".", "").replace(',', '.') else t
-    return normalized.toDoubleOrNull()
 }

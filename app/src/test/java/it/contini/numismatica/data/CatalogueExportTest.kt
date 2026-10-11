@@ -8,11 +8,11 @@ import java.util.zip.ZipFile
 
 class CatalogueExportTest {
 
-    private fun item(id: Long, title: String, issuer: String, year: Int?, qty: Int = 1, price: Double? = null) = OwnedItem(
+    private fun item(id: Long, title: String, issuer: String, year: Int?, qty: Int = 1) = OwnedItem(
         typeId = id, title = title, category = Categories.COIN, issuerCode = issuer.lowercase(), issuerName = issuer,
         minYear = year, maxYear = year, thumb = null, composition = null, demonetized = null, quantity = qty,
         grade = "SPL", notes = "Nota con & < > \" caratteri speciali", issueYear = year?.toString() ?: "",
-        addedAt = 1_760_000_000_000, purchasePrice = price, purchaseDate = "12/05/2024", provenance = "Mercatino",
+        addedAt = 1_760_000_000_000, provenance = "Mercatino", mintage = if (year == 1958) 24_910_000L else null,
     )
 
     private fun detail(s: TypeSummary) = TypeDetail(
@@ -26,8 +26,8 @@ class CatalogueExportTest {
 
     @Test
     fun writesValidWorkbook() {
-        val a = item(1, "500 Lire Caravelle", "Italia", 1958, qty = 2, price = 12.5)
-        val b = item(2, "Denario di Augusto", "Impero romano", -2, price = 180.0)
+        val a = item(1, "500 Lire Caravelle", "Italia", 1958, qty = 2)
+        val b = item(2, "Denario di Augusto", "Impero romano", -2)
         val c = item(3, "Pezzo senza dettagli", "Francia", null)
         val sa = TypeSummary(1, a.title, "coin", "italie", "Italia", 1958, 1958, null, null)
         val entries = listOf(
@@ -44,6 +44,9 @@ class CatalogueExportTest {
             assertTrue("xl/workbook.xml" in names)
             assertTrue("xl/worksheets/sheet1.xml" in names)
             assertTrue("xl/worksheets/sheet2.xml" in names)
+            val sheet2 = zip.getInputStream(zip.getEntry("xl/worksheets/sheet2.xml")).readBytes().toString(Charsets.UTF_8)
+            assertTrue(sheet2.contains("dataBar"))
+            assertTrue(!sheet2.contains("Spesa"))
             val sheet1 = zip.getInputStream(zip.getEntry("xl/worksheets/sheet1.xml")).readBytes().toString(Charsets.UTF_8)
             assertTrue(sheet1.contains("&amp; &lt; &gt; &quot;"))
             assertTrue(sheet1.contains("HYPERLINK"))

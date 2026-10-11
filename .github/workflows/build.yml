@@ -36,10 +36,10 @@ jobs:
           ws = wb["Collezione"]
           print("Columns:", ws.max_column, "Rows:", ws.max_row)
           print("Header:", [c.value for c in ws[1]])
-          for row in ws.iter_rows(min_row=2, values_only=True):
-              print(row)
-          for row in wb["Riepilogo"].iter_rows(values_only=True):
-              print(row)
+          for name in wb.sheetnames:
+              print("==", name)
+              for row in wb[name].iter_rows(values_only=True):
+                  print(row)
           EOF
 
       # Test-only file, kept on a separate pre-release so it never replaces the app download
