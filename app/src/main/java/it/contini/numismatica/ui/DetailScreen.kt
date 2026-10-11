@@ -50,6 +50,7 @@ import it.contini.numismatica.data.Categories
 import it.contini.numismatica.data.GRADES
 import it.contini.numismatica.data.OwnedItem
 import it.contini.numismatica.data.TypeDetail
+import it.contini.numismatica.data.italianDate
 import it.contini.numismatica.data.yearsLabel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -164,7 +165,7 @@ private fun DetailBody(d: TypeDetail) {
     Spacer(Modifier.padding(6.dp))
 
     val status = when (d.demonetized) {
-        true -> "Fuori corso" + (d.demonetizationDate?.let { " dal $it" } ?: "")
+        true -> "Fuori corso" + (italianDate(d.demonetizationDate)?.let { " dal $it" } ?: "")
         false -> "In corso legale"
         null -> null
     }

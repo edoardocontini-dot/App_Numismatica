@@ -92,3 +92,11 @@ fun yearsLabel(minYear: Int?, maxYear: Int?): String = when {
 }
 
 private fun formatYear(y: Int): String = if (y < 0) "${-y} a.C." else y.toString()
+
+/** "2002-03-01" -> "01/03/2002"; "2002" stays "2002"; anything else is returned unchanged. */
+fun italianDate(iso: String?): String? {
+    if (iso.isNullOrBlank()) return null
+    val m = Regex("""^(-?\d{1,4})-(\d{2})-(\d{2})$""").find(iso.trim()) ?: return iso
+    val (y, mo, d) = m.destructured
+    return if (mo == "00") y else if (d == "00") "$mo/$y" else "$d/$mo/$y"
+}

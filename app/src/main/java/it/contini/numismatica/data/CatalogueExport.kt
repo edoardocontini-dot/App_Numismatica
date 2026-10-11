@@ -95,7 +95,7 @@ object CatalogueExport {
                 text(d?.technique),
                 text(d?.edge, Style.WRAP),
                 text(status),
-                text(d?.demonetizationDate),
+                text(italianDate(d?.demonetizationDate)),
                 text(o.grade),
                 Cell.Num(o.quantity.toDouble(), Style.INTEGER),
                 num(o.purchasePrice, Style.EURO),

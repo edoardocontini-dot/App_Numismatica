@@ -60,6 +60,15 @@ class CatalogueExportTest {
     }
 
     @Test
+    fun dates() {
+        assertEquals("01/03/2002", italianDate("2002-03-01"))
+        assertEquals("2002", italianDate("2002-00-00"))
+        assertEquals("03/2002", italianDate("2002-03-00"))
+        assertEquals("1999", italianDate("1999"))
+        assertEquals(null, italianDate(""))
+    }
+
+    @Test
     fun columnLetters() {
         assertEquals("A", XlsxWriter.col(1))
         assertEquals("Z", XlsxWriter.col(26))
